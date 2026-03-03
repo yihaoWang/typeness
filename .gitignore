@@ -6,3 +6,6 @@ __pycache__/
 debug/
 tests/fixtures/*
 !tests/fixtures/cases.example.json
+
+# Platform-specific overrides (local development)
+pyproject.local.toml
