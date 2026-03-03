@@ -5,10 +5,11 @@ punctuation correction, list formatting, CJK spacing.
 """
 
 import re
+import threading
 import time
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, StoppingCriteria, StoppingCriteriaList
 
 from typeness.transcribe import _add_cjk_spacing
 
@@ -52,10 +53,27 @@ LLM_SYSTEM_PROMPT = """你是語音轉文字的後處理工具。你的唯一功
 直接輸出整理後的文字，不加任何說明。"""
 
 
+class _CancelCriteria(StoppingCriteria):
+    """StoppingCriteria that halts generation when cancel_event is set."""
+    def __init__(self, cancel_event: threading.Event) -> None:
+        self._cancel = cancel_event
+
+    def __call__(self, input_ids, scores, **kwargs) -> bool:
+        return self._cancel.is_set()
+
+
 def load_llm():
     """Load Qwen3 LLM model and tokenizer."""
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    torch_dtype = torch.float16 if device == "cuda" else torch.float32
+    # Auto-detect best available device: CUDA > MPS > CPU
+    if torch.cuda.is_available():
+        device = "cuda"
+        torch_dtype = torch.float16
+    elif torch.backends.mps.is_available():
+        device = "mps"
+        torch_dtype = torch.float16
+    else:
+        device = "cpu"
+        torch_dtype = torch.float32
 
     print(f"Loading LLM model ({LLM_MODEL_ID}) on {device}...")
     tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL_ID)
@@ -69,7 +87,7 @@ def load_llm():
     return model, tokenizer
 
 
-def process_text(model, tokenizer, text: str) -> str:
+def process_text(model, tokenizer, text: str, cancel_event: threading.Event | None = None) -> str:
     """Process transcribed text with LLM to clean up and format."""
     messages = [
         {"role": "system", "content": LLM_SYSTEM_PROMPT},
@@ -85,6 +103,7 @@ def process_text(model, tokenizer, text: str) -> str:
     start = time.time()
 
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    stopping_criteria = StoppingCriteriaList([_CancelCriteria(cancel_event)]) if cancel_event else None
     with torch.no_grad():
         output_ids = model.generate(
             **inputs,
@@ -92,6 +111,7 @@ def process_text(model, tokenizer, text: str) -> str:
             temperature=None,
             top_p=None,
             do_sample=False,
+            stopping_criteria=stopping_criteria,
         )
 
     # Extract only the generated tokens (skip the input prompt)

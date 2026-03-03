@@ -5,6 +5,7 @@ Loads the Whisper model and provides transcription with CJK text normalization.
 
 import re
 import time
+import warnings
 
 import numpy as np
 import torch
@@ -49,8 +50,16 @@ def _add_cjk_spacing(text: str) -> str:
 
 def load_whisper():
     """Load Whisper model and return the ASR pipeline and processor."""
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    torch_dtype = torch.float16 if device == "cuda" else torch.float32
+    # Auto-detect best available device: CUDA > MPS > CPU
+    if torch.cuda.is_available():
+        device = "cuda"
+        torch_dtype = torch.float16
+    elif torch.backends.mps.is_available():
+        device = "mps"
+        torch_dtype = torch.float16
+    else:
+        device = "cpu"
+        torch_dtype = torch.float32
 
     print(f"Loading Whisper model ({WHISPER_MODEL_ID}) on {device}...")
     model = AutoModelForSpeechSeq2Seq.from_pretrained(
@@ -80,15 +89,19 @@ def transcribe(asr_pipeline, processor, audio: np.ndarray) -> str:
 
     start = time.time()
 
-    result = asr_pipeline(
-        audio,
-        return_timestamps=True,
-        generate_kwargs={
-            "language": "zh",
-            "task": "transcribe",
-            "prompt_ids": prompt_ids,
-        },
-    )
+    # Suppress a known benign transformers warning about slice truncation in
+    # Whisper timestamp mode (cosmetic only, does not affect output quality).
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Truncating the start/stop/step of slice")
+        result = asr_pipeline(
+            audio,
+            return_timestamps=True,
+            generate_kwargs={
+                "language": "zh",
+                "task": "transcribe",
+                "prompt_ids": prompt_ids,
+            },
+        )
 
     elapsed = time.time() - start
     text = _normalize_punctuation(result["text"])
