@@ -22,9 +22,8 @@ from pathlib import Path
 
 import numpy as np
 
-# Suppress transformers/HF Hub progress bars to keep output concise
+# Suppress HF Hub progress bars to keep output concise
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-os.environ.setdefault("TRANSFORMERS_NO_TQDM", "1")
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures"
 CASES_FILE = FIXTURES_DIR / "cases.json"
@@ -59,13 +58,13 @@ def _load_wav(audio_path):
         return int16_data.astype(np.float32) / 32767.0
 
 
-def replay_whisper(asr_pipeline, processor, audio_path):
+def replay_whisper(model_path, audio_path):
     """Replay a WAV file through Whisper and return (text, latency)."""
     from typeness.transcribe import transcribe
 
     audio = _load_wav(audio_path)
     start = time.time()
-    text = transcribe(asr_pipeline, processor, audio)
+    text = transcribe(model_path, audio)
     latency = time.time() - start
     return text, latency
 
@@ -80,7 +79,7 @@ def replay_llm(llm_model, tokenizer, whisper_text):
     return text, latency
 
 
-def replay_full(asr_pipeline, processor, llm_model, tokenizer, audio_path):
+def replay_full(model_path, llm_model, tokenizer, audio_path):
     """Run full pipeline: audio -> Whisper -> LLM. Return result dict."""
     from typeness.postprocess import process_text
     from typeness.transcribe import transcribe
@@ -88,7 +87,7 @@ def replay_full(asr_pipeline, processor, llm_model, tokenizer, audio_path):
     audio = _load_wav(audio_path)
 
     start_w = time.time()
-    whisper_text = transcribe(asr_pipeline, processor, audio)
+    whisper_text = transcribe(model_path, audio)
     whisper_latency = time.time() - start_w
 
     start_l = time.time()
@@ -120,14 +119,14 @@ def _char_diff_ratio(expected, actual):
     return diff_count / max_len
 
 
-def run_all_cases(stage, asr_pipeline=None, processor=None,
+def run_all_cases(stage, model_path=None,
                   llm_model=None, tokenizer=None,
                   case_id=None, tag=None):
     """Run replay on all matching cases and return structured results.
 
     Args:
         stage: "whisper", "llm", or "full"
-        asr_pipeline, processor: Whisper model (needed for whisper/full)
+        model_path: Whisper model path (needed for whisper/full)
         llm_model, tokenizer: LLM model (needed for llm/full)
         case_id: Filter to a single case ID
         tag: Filter to cases with this tag
@@ -144,7 +143,7 @@ def run_all_cases(stage, asr_pipeline=None, processor=None,
         audio_path = FIXTURES_DIR / case["audio_file"]
 
         if stage == "whisper":
-            actual, _ = replay_whisper(asr_pipeline, processor, audio_path)
+            actual, _ = replay_whisper(model_path, audio_path)
             expected = case.get("whisper_expected")
             result_entry = {
                 "case_id": cid,
@@ -172,7 +171,7 @@ def run_all_cases(stage, asr_pipeline=None, processor=None,
 
         elif stage == "full":
             full_result = replay_full(
-                asr_pipeline, processor, llm_model, tokenizer, audio_path
+                model_path, llm_model, tokenizer, audio_path
             )
             expected = case["processed_expected"]
             actual = full_result["processed_text"]
@@ -287,12 +286,12 @@ def main():
     args = parser.parse_args()
 
     # Load only the models needed for the requested stage
-    asr_pipeline = processor = None
+    model_path = None
     llm_model = tokenizer = None
 
     if args.stage in ("whisper", "full"):
         from typeness.transcribe import load_whisper
-        asr_pipeline, processor = load_whisper()
+        model_path = load_whisper()
 
     if args.stage in ("llm", "full"):
         from typeness.postprocess import load_llm
@@ -300,8 +299,7 @@ def main():
 
     results = run_all_cases(
         stage=args.stage,
-        asr_pipeline=asr_pipeline,
-        processor=processor,
+        model_path=model_path,
         llm_model=llm_model,
         tokenizer=tokenizer,
         case_id=args.case,

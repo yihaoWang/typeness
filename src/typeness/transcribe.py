@@ -3,24 +3,13 @@
 Loads the Whisper model and provides transcription with CJK text normalization.
 """
 
-import os
 import re
 import time
-import warnings
 
 import numpy as np
-import torch
+import mlx_whisper
 
-# Required for Whisper on MPS: some ops fall back to CPU without this,
-# and without the fallback they deadlock instead of raising an error.
-os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
-from transformers import (
-    AutoModelForSpeechSeq2Seq,
-    AutoProcessor,
-    pipeline,
-)
-
-WHISPER_MODEL_ID = "openai/whisper-large-v3-turbo"
+WHISPER_MODEL_ID = "mlx-community/whisper-large-v3-turbo"
 WHISPER_INITIAL_PROMPT = "以下是繁體中文的語音內容。"
 
 # Half-width -> full-width punctuation mapping for CJK text
@@ -54,59 +43,29 @@ def _add_cjk_spacing(text: str) -> str:
 
 
 def load_whisper():
-    """Load Whisper model and return the ASR pipeline and processor."""
-    # Auto-detect best available device: CUDA > MPS > CPU
-    if torch.cuda.is_available():
-        device = "cuda"
-        torch_dtype = torch.float16
-    elif torch.backends.mps.is_available():
-        device = "mps"
-        torch_dtype = torch.float32  # float16 causes silent hangs on MPS with Whisper
-    else:
-        device = "cpu"
-        torch_dtype = torch.float32
-
-    print(f"Loading Whisper model ({WHISPER_MODEL_ID}) on {device}...")
-    model = AutoModelForSpeechSeq2Seq.from_pretrained(
-        WHISPER_MODEL_ID,
-        dtype=torch_dtype,
-        low_cpu_mem_usage=True,
-    ).to(device)
-
-    processor = AutoProcessor.from_pretrained(WHISPER_MODEL_ID)
-
-    asr_pipeline = pipeline(
-        "automatic-speech-recognition",
-        model=model,
-        tokenizer=processor.tokenizer,
-        feature_extractor=processor.feature_extractor,
-        dtype=torch_dtype,
-        device=device,
+    """Load Whisper model and return the model path string."""
+    print(f"Loading Whisper model ({WHISPER_MODEL_ID})...")
+    # Trigger model download/cache by running a dummy transcribe
+    mlx_whisper.transcribe(
+        np.zeros(16000, dtype=np.float32),
+        path_or_hf_repo=WHISPER_MODEL_ID,
+        language="zh",
     )
     print("Whisper model loaded.")
-    return asr_pipeline, processor
+    return WHISPER_MODEL_ID
 
 
-def transcribe(asr_pipeline, processor, audio: np.ndarray) -> str:
-    """Transcribe audio using the Whisper pipeline."""
-    device = asr_pipeline.device
-    prompt_ids = processor.get_prompt_ids(WHISPER_INITIAL_PROMPT, return_tensors="pt").to(device)
-
+def transcribe(model_path: str, audio: np.ndarray) -> str:
+    """Transcribe audio using mlx-whisper."""
     start = time.time()
 
-    # Suppress a known benign transformers warning about slice truncation in
-    # Whisper timestamp mode (cosmetic only, does not affect output quality).
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Truncating the start/stop/step of slice")
-        result = asr_pipeline(
-            audio,
-            return_timestamps=True,
-            generate_kwargs={
-                "language": "zh",
-                "task": "transcribe",
-                "prompt_ids": prompt_ids,
-            },
-        )
+    result = mlx_whisper.transcribe(
+        audio,
+        path_or_hf_repo=model_path,
+        language="zh",
+        initial_prompt=WHISPER_INITIAL_PROMPT,
+        temperature=0.0,
+    )
 
     elapsed = time.time() - start
     text = _normalize_punctuation(result["text"])

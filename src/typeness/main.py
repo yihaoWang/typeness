@@ -8,8 +8,6 @@ import threading
 import time
 import traceback
 
-import transformers
-
 from typeness.audio import MIN_RECORDING_SECONDS, SAMPLE_RATE, record_audio_start, record_audio_stop, stop_stream
 from typeness.clipboard import paste_text
 from typeness.debug import DEBUG_DIR, save_capture
@@ -18,13 +16,9 @@ from typeness.menubar import TypenessMenuBar
 from typeness.postprocess import load_llm, process_text
 from typeness.transcribe import load_whisper, transcribe
 
-# Suppress noisy warnings from transformers (duplicate logits-processor, invalid generation flags)
-transformers.logging.set_verbosity_error()
-
 
 def _event_loop(
-    asr_pipeline,
-    processor,
+    model_path,
     llm_model,
     tokenizer,
     event_queue: queue.Queue,
@@ -66,7 +60,7 @@ def _event_loop(
                     # Transcribe
                     print("Transcribing...")
                     t0 = time.time()
-                    whisper_text = transcribe(asr_pipeline, processor, audio)
+                    whisper_text = transcribe(model_path, audio)
                     whisper_elapsed = time.time() - t0
 
                     if cancel_event.is_set():
@@ -131,7 +125,7 @@ def main(*, debug: bool = False):
         print(f"Debug mode ON — captures saved to {DEBUG_DIR}/")
     print("Loading models, please wait...\n")
 
-    asr_pipeline, processor = load_whisper()
+    model_path = load_whisper()
     llm_model, tokenizer = load_llm()
 
     event_queue: queue.Queue[str] = queue.Queue()
@@ -151,7 +145,7 @@ def main(*, debug: bool = False):
 
     worker = threading.Thread(
         target=_event_loop,
-        args=(asr_pipeline, processor, llm_model, tokenizer,
+        args=(model_path, llm_model, tokenizer,
               event_queue, listener, menu_app, debug, shutdown_event, cancel_event),
         daemon=True,
     )
