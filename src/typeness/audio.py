@@ -3,6 +3,8 @@
 Captures microphone input via sounddevice with start/stop control.
 """
 
+import time
+
 import numpy as np
 import sounddevice as sd
 
@@ -21,18 +23,31 @@ def _audio_callback(indata: np.ndarray, frames: int, time_info, status) -> None:
     _audio_chunks.append(indata.copy())
 
 
+_OPEN_RETRIES = 3
+_OPEN_RETRY_DELAY = 0.5  # seconds
+
+
 def record_audio_start() -> None:
     """Start recording audio from the microphone."""
     global _audio_stream
     _audio_chunks.clear()
-    _audio_stream = sd.InputStream(
-        samplerate=SAMPLE_RATE,
-        channels=CHANNELS,
-        dtype=DTYPE,
-        callback=_audio_callback,
-    )
-    _audio_stream.start()
-    print("Recording...")
+    last_error: Exception | None = None
+    for attempt in range(_OPEN_RETRIES):
+        try:
+            _audio_stream = sd.InputStream(
+                samplerate=SAMPLE_RATE,
+                channels=CHANNELS,
+                dtype=DTYPE,
+                callback=_audio_callback,
+            )
+            _audio_stream.start()
+            print("Recording...")
+            return
+        except sd.PortAudioError as exc:
+            last_error = exc
+            print(f"  [audio] Stream open failed (attempt {attempt + 1}/{_OPEN_RETRIES}): {exc}")
+            time.sleep(_OPEN_RETRY_DELAY)
+    raise RuntimeError(f"Could not open audio stream after {_OPEN_RETRIES} attempts") from last_error
 
 
 def stop_stream() -> None:

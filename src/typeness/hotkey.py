@@ -76,7 +76,7 @@ class HotkeyListener:
     def busy(self, value: bool) -> None:
         self._busy = value
 
-    def _on_press(self, key: Key | KeyCode, injected: bool) -> None:
+    def _on_press(self, key: Key | KeyCode, injected: bool = False) -> None:
         # Ignore synthetic (injected) key events
         if injected:
             return
@@ -106,7 +106,7 @@ class HotkeyListener:
             self._recording = True
             self._queue.put(EVENT_START_RECORDING)
 
-    def _on_release(self, key: Key | KeyCode, injected: bool) -> None:
+    def _on_release(self, key: Key | KeyCode, injected: bool = False) -> None:
         if injected:
             return
 

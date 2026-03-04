@@ -3,12 +3,17 @@
 Loads the Whisper model and provides transcription with CJK text normalization.
 """
 
+import os
 import re
 import time
 import warnings
 
 import numpy as np
 import torch
+
+# Required for Whisper on MPS: some ops fall back to CPU without this,
+# and without the fallback they deadlock instead of raising an error.
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 from transformers import (
     AutoModelForSpeechSeq2Seq,
     AutoProcessor,
@@ -56,7 +61,7 @@ def load_whisper():
         torch_dtype = torch.float16
     elif torch.backends.mps.is_available():
         device = "mps"
-        torch_dtype = torch.float16
+        torch_dtype = torch.float32  # float16 causes silent hangs on MPS with Whisper
     else:
         device = "cpu"
         torch_dtype = torch.float32
