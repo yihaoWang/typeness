@@ -1,14 +1,13 @@
 # Typeness
 
-Local voice input tool that converts speech to structured written text using Whisper and Qwen3. Works as a global voice input method — press a hotkey in any application, speak, and the processed text is automatically pasted at the cursor position.
+Local voice input tool that converts speech to structured written text using Whisper and Qwen3. Works as a global voice input method — press a hotkey or click the menu bar icon in any application, speak, and the processed text is automatically pasted at the cursor position.
 
 ## Prerequisites
 
-- Windows 11
-- NVIDIA GPU with CUDA support (tested on RTX 5090 Laptop, Blackwell architecture)
-- CUDA drivers installed
+- **macOS** (Apple Silicon with MPS) or **Windows** (NVIDIA GPU with CUDA)
 - Python 3.12
 - [uv](https://docs.astral.sh/uv/) package manager
+- **macOS only**: grant Accessibility permission to your terminal (System Settings → Privacy & Security → Accessibility)
 
 ## Installation
 
@@ -21,9 +20,7 @@ cd typeness
 uv sync
 ```
 
-PyTorch with CUDA 13.0 support is automatically resolved via `[tool.uv.sources]` in `pyproject.toml`.
-
-Dependencies include `pynput` (global hotkey listener) and `pyperclip` (clipboard operations).
+PyTorch is installed from standard PyPI, which supports CUDA, MPS (Apple Silicon), and CPU automatically. For CUDA-specific optimization, see the commented `[tool.uv.sources]` section in `pyproject.toml`.
 
 ## Usage
 
@@ -41,16 +38,26 @@ On first run, Whisper (`openai/whisper-large-v3-turbo`) and Qwen3 (`Qwen/Qwen3-1
 
 ### How it works
 
-1. Launch the program — it runs in the terminal foreground
-2. Press **Shift+Win+A** to start recording (works in any application)
+1. Launch the program — a menu bar icon (🎙) appears and the terminal shows status
+2. Press **Shift+Control+A** or click the menu bar icon to start recording (works in any application)
 3. Speak into your microphone (in Traditional Chinese)
-4. Press **Shift+Win+A** again to stop recording
+4. Press **Shift+Control+A** again or click the menu bar icon to stop recording
 5. The processed text is automatically pasted into the focused window
-6. The terminal displays:
+6. During transcription/processing, press the hotkey or click "取消" in the menu to cancel
+7. The terminal displays:
    - **Whisper raw**: original speech-to-text result
-   - **LLM processed**: cleaned and formatted text (filler words removed, punctuation added, lists formatted)
+   - **LLM processed**: cleaned and formatted text (punctuation added, lists formatted)
    - **Timing stats**: recording duration, Whisper latency, LLM latency, total latency
-7. Press **Ctrl+C** to exit (global keyboard hook is cleaned up)
+8. Click "退出" in the menu bar or press **Ctrl+C** to exit
+
+### Auto-start at login (macOS)
+
+```bash
+uv run typeness --install-login-item      # install as login item
+uv run typeness --uninstall-login-item    # remove login item
+```
+
+Logs are written to `~/Library/Logs/typeness.log`.
 
 ## Regression Testing
 
@@ -72,15 +79,18 @@ uv run python -m typeness.replay --help            # all options
 
 Modular design with unified PyTorch + transformers inference engine. Source code lives in `src/typeness/`:
 
-- `main.py` — event-driven loop, orchestrates all modules
-- `audio.py` — microphone recording (sounddevice)
+- `main.py` — worker thread event loop + menu bar app on main thread
+- `audio.py` — microphone recording (sounddevice), auto-resample to 16kHz via scipy
 - `transcribe.py` — Whisper speech-to-text and CJK text normalization
-- `postprocess.py` — Qwen3 LLM text cleanup (filler removal, punctuation, list formatting)
-- `hotkey.py` — global keyboard listener (Shift+Win+A toggle via pynput)
+- `postprocess.py` — Qwen3 LLM text cleanup (punctuation, list formatting), cancellable generation
+- `hotkey.py` — global keyboard listener (Shift+Control+A toggle via pynput), macOS CGEventTap recovery
+- `menubar.py` — macOS menu bar UI (rumps), state display and controls
 - `clipboard.py` — clipboard write and auto-paste (pyperclip + pynput Controller)
+- `login_item.py` — macOS LaunchAgent management for auto-start
 
 ### Models
 
-- **Speech recognition**: Whisper large-v3-turbo (FP16, ~3.5 GB VRAM)
-- **Text post-processing**: Qwen3-1.7B (FP16, ~3.4 GB VRAM)
-- **Audio capture**: sounddevice (16kHz, mono, float32)
+- **Speech recognition**: Whisper large-v3-turbo (FP16 on CUDA, FP32 on MPS)
+- **Text post-processing**: Qwen3-1.7B (FP16)
+- **Audio capture**: sounddevice (16kHz mono float32; auto-resamples if device native rate differs)
+- **Device auto-detection**: CUDA → MPS → CPU
