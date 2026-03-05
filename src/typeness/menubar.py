@@ -5,9 +5,13 @@ Uses SF Symbols as template images to match the native macOS menu bar icon style
 """
 
 import threading
+import time
 
 import rumps
-from AppKit import NSApplication, NSImage
+from AppKit import (
+    NSApplication, NSBackingStoreBuffered, NSBorderlessWindowMask,
+    NSColor, NSImage, NSImageView, NSScreen, NSView, NSWindow,
+)
 
 from typeness.hotkey import EVENT_START_RECORDING, EVENT_STOP_RECORDING
 
@@ -53,6 +57,8 @@ class TypenessMenuBar(rumps.App):
         self._lock = threading.Lock()
         self._state = "idle"
         self._frame = 0
+        self._done_until: float = 0
+        self._overlay: NSWindow | None = None
 
         self._status_item = rumps.MenuItem(_STATUS_LABELS["idle"])
         self._status_item.set_callback(None)  # not clickable
@@ -85,10 +91,50 @@ class TypenessMenuBar(rumps.App):
         """Set the menu bar button to display an SF Symbol as a template image."""
         image = NSImage.imageWithSystemSymbolName_accessibilityDescription_(symbol_name, None)
         if image is not None:
-            image.setTemplate_(True)  # adapts to light/dark mode like native icons
+            image.setTemplate_(True)
             button = self._nsapp.nsstatusitem.button()
             button.setImage_(image)
             button.setTitle_("")
+
+    def _create_overlay(self) -> NSWindow:
+        """Create a frosted-glass HUD pill with a green checkmark at the bottom centre."""
+        size = 30.0
+        screen_frame = NSScreen.mainScreen().frame()
+        x = (screen_frame.size.width - size) / 2
+        y = 80.0
+
+        win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+            ((x, y), (size, size)),
+            NSBorderlessWindowMask,
+            NSBackingStoreBuffered,
+            False,
+        )
+        win.setBackgroundColor_(NSColor.clearColor())
+        win.setOpaque_(False)
+        win.setAlphaValue_(0.55)
+        win.setLevel_(999)
+        win.setIgnoresMouseEvents_(True)
+        win.setCollectionBehavior_(1 << 2)
+        win.setReleasedWhenClosed_(False)
+
+        # Green circle background
+        bg = NSView.alloc().initWithFrame_(((0, 0), (size, size)))
+        bg.setWantsLayer_(True)
+        bg.layer().setBackgroundColor_(NSColor.systemGreenColor().CGColor())
+        bg.layer().setCornerRadius_(size / 2)
+
+        # White checkmark
+        icon_size = 16.0
+        icon_origin = ((size - icon_size) / 2, (size - icon_size) / 2)
+        image = NSImage.imageWithSystemSymbolName_accessibilityDescription_("checkmark", None)
+        image_view = NSImageView.alloc().initWithFrame_((icon_origin, (icon_size, icon_size)))
+        image_view.setImage_(image)
+        image_view.setContentTintColor_(NSColor.whiteColor())
+        bg.addSubview_(image_view)
+
+        win.setContentView_(bg)
+        win.orderFrontRegardless()
+        return win
 
     # --- Called from worker thread ---
 
@@ -96,6 +142,8 @@ class TypenessMenuBar(rumps.App):
         """Thread-safe state update. Worker thread writes; main thread reads via timer."""
         with self._lock:
             self._state = state
+            if state == "done":
+                self._done_until = time.monotonic() + 1.5
 
     # --- Main-thread callbacks ---
 
@@ -103,7 +151,14 @@ class TypenessMenuBar(rumps.App):
         with self._lock:
             state = self._state
 
-        # Show the menu bar icon only when active (recording / transcribing / processing)
+        # Auto-revert "done" state after the flash duration
+        if state == "done":
+            with self._lock:
+                if time.monotonic() >= self._done_until:
+                    self._state = "idle"
+                    state = "idle"
+
+        # Show the menu bar icon only when active (recording / transcribing / processing / done)
         visible = state != "idle"
         self._nsapp.nsstatusitem.setVisible_(visible)
 
@@ -113,6 +168,13 @@ class TypenessMenuBar(rumps.App):
         elif state in _SF_SYMBOLS:
             self._frame = 0
             self._set_sf_symbol(_SF_SYMBOLS[state])
+
+        # Show/hide the bottom-center green dot overlay for "done"
+        if state == "done" and self._overlay is None:
+            self._overlay = self._create_overlay()
+        elif state != "done" and self._overlay is not None:
+            self._overlay.close()
+            self._overlay = None
 
         self._status_item.title = _STATUS_LABELS.get(state, _STATUS_LABELS["idle"])
 
@@ -127,7 +189,7 @@ class TypenessMenuBar(rumps.App):
     def _on_toggle(self, _) -> None:
         with self._lock:
             state = self._state
-        if state == "idle":
+        if state in ("idle", "done"):
             self._event_queue.put(EVENT_START_RECORDING)
         elif state == "recording":
             self._event_queue.put(EVENT_STOP_RECORDING)

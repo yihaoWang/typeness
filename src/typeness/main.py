@@ -55,6 +55,7 @@ def _event_loop(
                     rec_duration = len(audio) / SAMPLE_RATE
                     if rec_duration < MIN_RECORDING_SECONDS:
                         print("Recording too short, skipping.\n")
+                        menu_app.set_state("idle")
                         continue
 
                     # Transcribe
@@ -65,10 +66,12 @@ def _event_loop(
 
                     if cancel_event.is_set():
                         print("已取消。\n")
+                        menu_app.set_state("idle")
                         continue
 
                     if not whisper_text.strip():
                         print("No speech detected, skipping.\n")
+                        menu_app.set_state("idle")
                         continue
 
                     # LLM post-processing
@@ -80,12 +83,14 @@ def _event_loop(
 
                     if cancel_event.is_set():
                         print("已取消。\n")
+                        menu_app.set_state("idle")
                         continue
 
                     total_elapsed = whisper_elapsed + llm_elapsed
 
                     # Auto-paste to focused window
                     paste_text(processed_text)
+                    menu_app.set_state("done")  # reverts to idle automatically after 1.5s
 
                     # Debug capture (after paste so it doesn't affect perceived latency)
                     if debug:
@@ -108,9 +113,12 @@ def _event_loop(
                     print(f"Total latency      : {total_elapsed:.2f}s")
                     print("=" * 50 + "\n")
 
+                except Exception:
+                    menu_app.set_state("idle")
+                    raise
+
                 finally:
                     listener.busy = False
-                    menu_app.set_state("idle")
 
         except Exception:
             traceback.print_exc()
