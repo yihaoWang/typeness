@@ -1,21 +1,30 @@
 """Mac menu bar icon for Typeness.
 
 Displays recording state in the menu bar and provides click-to-record and quit controls.
+Uses SF Symbols as template images to match the native macOS menu bar icon style.
 """
 
 import threading
 
 import rumps
-from AppKit import NSApplication
+from AppKit import NSApplication, NSImage
 
 from typeness.hotkey import EVENT_START_RECORDING, EVENT_STOP_RECORDING
 
-_ICONS = {
-    "idle": "🎙",
-    "recording": "⏺",
+# SF Symbol name for each state
+_SF_SYMBOLS = {
+    "recording": "mic.fill",
+    "transcribing": "waveform",
+    "processing": "waveform",
 }
 
-_PROCESSING_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+# Spinner frames for transcribing/processing (cycling SF symbols)
+_SPINNER_SYMBOLS = [
+    "waveform",
+    "waveform.badge.microphone",
+    "waveform",
+    "mic",
+]
 
 _STATUS_LABELS = {
     "idle": "狀態：待機",
@@ -36,7 +45,7 @@ class TypenessMenuBar(rumps.App):
     """Menu bar icon that reflects Typeness state and provides basic controls."""
 
     def __init__(self, event_queue, cleanup_fn, cancel_event=None):
-        super().__init__("Typeness", title=_ICONS["idle"], quit_button=None)
+        super().__init__("Typeness", title="", quit_button=None)
 
         self._event_queue = event_queue
         self._cleanup_fn = cleanup_fn
@@ -70,6 +79,16 @@ class TypenessMenuBar(rumps.App):
     def _hide_from_dock(self):
         """Called via before_start: make this a background-only app with no Dock icon or main menu bar."""
         NSApplication.sharedApplication().setActivationPolicy_(2)  # NSApplicationActivationPolicyProhibited
+        self._nsapp.nsstatusitem.setVisible_(False)  # hide until first recording starts
+
+    def _set_sf_symbol(self, symbol_name: str) -> None:
+        """Set the menu bar button to display an SF Symbol as a template image."""
+        image = NSImage.imageWithSystemSymbolName_accessibilityDescription_(symbol_name, None)
+        if image is not None:
+            image.setTemplate_(True)  # adapts to light/dark mode like native icons
+            button = self._nsapp.nsstatusitem.button()
+            button.setImage_(image)
+            button.setTitle_("")
 
     # --- Called from worker thread ---
 
@@ -84,12 +103,16 @@ class TypenessMenuBar(rumps.App):
         with self._lock:
             state = self._state
 
+        # Show the menu bar icon only when active (recording / transcribing / processing)
+        visible = state != "idle"
+        self._nsapp.nsstatusitem.setVisible_(visible)
+
         if state in ("transcribing", "processing"):
-            self._frame = (self._frame + 1) % len(_PROCESSING_FRAMES)
-            self.title = _PROCESSING_FRAMES[self._frame]
-        else:
+            self._frame = (self._frame + 1) % len(_SPINNER_SYMBOLS)
+            self._set_sf_symbol(_SPINNER_SYMBOLS[self._frame])
+        elif state in _SF_SYMBOLS:
             self._frame = 0
-            self.title = _ICONS.get(state, _ICONS["idle"])
+            self._set_sf_symbol(_SF_SYMBOLS[state])
 
         self._status_item.title = _STATUS_LABELS.get(state, _STATUS_LABELS["idle"])
 
