@@ -10,7 +10,7 @@ import numpy as np
 import mlx_whisper
 
 WHISPER_MODEL_ID = "mlx-community/whisper-large-v3-turbo"
-WHISPER_INITIAL_PROMPT = "以下是繁體中文的語音內容。"
+WHISPER_INITIAL_PROMPT = "以下是繁體中文夾雜英文的語音內容，英文請保留原文不要翻譯。"
 
 # Half-width -> full-width punctuation mapping for CJK text
 _PUNCTUATION_MAP = str.maketrans({
@@ -49,7 +49,6 @@ def load_whisper():
     mlx_whisper.transcribe(
         np.zeros(16000, dtype=np.float32),
         path_or_hf_repo=WHISPER_MODEL_ID,
-        language="zh",
     )
     print("Whisper model loaded.")
     return WHISPER_MODEL_ID
@@ -62,7 +61,6 @@ def transcribe(model_path: str, audio: np.ndarray) -> str:
     result = mlx_whisper.transcribe(
         audio,
         path_or_hf_repo=model_path,
-        language="zh",
         initial_prompt=WHISPER_INITIAL_PROMPT,
         temperature=0.0,
     )
