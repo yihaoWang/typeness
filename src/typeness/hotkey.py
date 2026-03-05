@@ -30,6 +30,11 @@ if _IS_MACOS:
     from Quartz.CoreGraphics import CGEventTapEnable, kCGEventTapDisabledByTimeout
 
     class _Listener(Listener):
+        def __init__(self, *args, on_tap_reset=None, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._tap = None
+            self._on_tap_reset = on_tap_reset
+
         def _create_event_tap(self):
             self._tap = super()._create_event_tap()
             return self._tap
@@ -37,6 +42,8 @@ if _IS_MACOS:
         def _handler(self, proxy, event_type, event, refcon):
             if event_type == kCGEventTapDisabledByTimeout:
                 CGEventTapEnable(self._tap, True)
+                if self._on_tap_reset is not None:
+                    self._on_tap_reset()
                 return event
             return super()._handler(proxy, event_type, event, refcon)
 else:
@@ -133,6 +140,11 @@ class HotkeyListener:
                 return KeyCode.from_char(key.char.lower())
         return key
 
+    def _on_tap_reset(self) -> None:
+        """Called when CGEventTap re-enables after timeout; release events were lost."""
+        self._pressed_keys.clear()
+        self._hotkey_handled = False
+
     def _start_listener(self) -> None:
         """Create and start a fresh pynput listener."""
         self._pressed_keys.clear()
@@ -140,6 +152,7 @@ class HotkeyListener:
         self._listener = _Listener(
             on_press=self._on_press,
             on_release=self._on_release,
+            on_tap_reset=self._on_tap_reset,
         )
         self._listener.daemon = True
         self._listener.start()
@@ -153,6 +166,10 @@ class HotkeyListener:
             if self._listener is not None and not self._listener.is_alive():
                 print("[hotkey] Listener died, restarting...")
                 self._start_listener()
+
+    def is_running(self) -> bool:
+        """Return True if the listener thread is alive."""
+        return self._listener is not None and self._listener.is_alive()
 
     def start(self) -> None:
         """Start the global keyboard listener (runs in a daemon thread)."""

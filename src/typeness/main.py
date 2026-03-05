@@ -114,6 +114,7 @@ def _event_loop(
                     print("=" * 50 + "\n")
 
                 except Exception:
+                    listener._recording = False
                     menu_app.set_state("idle")
                     raise
 
@@ -123,6 +124,7 @@ def _event_loop(
         except Exception:
             traceback.print_exc()
             listener.busy = False
+            listener._recording = False
             menu_app.set_state("idle")
 
 
@@ -136,11 +138,12 @@ def main(*, debug: bool = False):
     model_path = load_whisper()
     llm_model, tokenizer = load_llm()
 
+    from ApplicationServices import AXIsProcessTrusted
+    hotkey_available = AXIsProcessTrusted()
+
     event_queue: queue.Queue[str] = queue.Queue()
     cancel_event = threading.Event()
     listener = HotkeyListener(event_queue, cancel_event)
-    listener.start()
-
     shutdown_event = threading.Event()
 
     def cleanup():
@@ -149,18 +152,22 @@ def main(*, debug: bool = False):
         listener.stop()
         print("\nBye!")
 
-    menu_app = TypenessMenuBar(event_queue, cleanup, cancel_event)
-
-    worker = threading.Thread(
-        target=_event_loop,
-        args=(model_path, llm_model, tokenizer,
-              event_queue, listener, menu_app, debug, shutdown_event, cancel_event),
-        daemon=True,
+    menu_app = TypenessMenuBar(
+        event_queue, cleanup, cancel_event,
+        accessibility_granted=hotkey_available,
     )
-    worker.start()
 
-    print("\nReady! Press Shift+Control+A or click the menu bar icon to start/stop voice input.")
-    print("Press Ctrl+C or use the menu bar icon to exit.\n")
+    if hotkey_available:
+        listener.start()
+        worker = threading.Thread(
+            target=_event_loop,
+            args=(model_path, llm_model, tokenizer,
+                  event_queue, listener, menu_app, debug, shutdown_event, cancel_event),
+            daemon=True,
+        )
+        worker.start()
+        print("\nReady! Press Shift+Control+A or click the menu bar icon to start/stop voice input.")
+        print("Press Ctrl+C or use the menu bar icon to exit.\n")
 
     # Blocks the main thread — rumps handles the macOS event loop
     menu_app.run()
