@@ -76,6 +76,10 @@ class TypenessMenuBar(rumps.App):
         # Hide from Dock and main menu bar — run as a pure status-bar-only app
         rumps.events.before_start.register(self._hide_from_dock)
 
+        # Build overlay once; show/hide via orderFrontRegardless/orderOut to avoid
+        # repeatedly creating windows which disrupts the CGEventTap.
+        rumps.events.before_start.register(self._setup_overlay)
+
         # Poll state every 0.2s on the main thread to update the icon/menu
         self._timer = rumps.Timer(self._poll_state, 0.2)
         self._timer.start()
@@ -96,8 +100,8 @@ class TypenessMenuBar(rumps.App):
             button.setImage_(image)
             button.setTitle_("")
 
-    def _create_overlay(self) -> NSWindow:
-        """Create a frosted-glass HUD pill with a green checkmark at the bottom centre."""
+    def _setup_overlay(self) -> None:
+        """Build the green-dot overlay window once at startup (hidden). Show/hide via order methods."""
         size = 30.0
         screen_frame = NSScreen.mainScreen().frame()
         x = (screen_frame.size.width - size) / 2
@@ -117,13 +121,11 @@ class TypenessMenuBar(rumps.App):
         win.setCollectionBehavior_(1 << 2)
         win.setReleasedWhenClosed_(False)
 
-        # Green circle background
         bg = NSView.alloc().initWithFrame_(((0, 0), (size, size)))
         bg.setWantsLayer_(True)
         bg.layer().setBackgroundColor_(NSColor.systemGreenColor().CGColor())
         bg.layer().setCornerRadius_(size / 2)
 
-        # White checkmark
         icon_size = 16.0
         icon_origin = ((size - icon_size) / 2, (size - icon_size) / 2)
         image = NSImage.imageWithSystemSymbolName_accessibilityDescription_("checkmark", None)
@@ -133,8 +135,7 @@ class TypenessMenuBar(rumps.App):
         bg.addSubview_(image_view)
 
         win.setContentView_(bg)
-        win.orderFrontRegardless()
-        return win
+        self._overlay = win  # hidden until first "done" state
 
     # --- Called from worker thread ---
 
@@ -170,11 +171,11 @@ class TypenessMenuBar(rumps.App):
             self._set_sf_symbol(_SF_SYMBOLS[state])
 
         # Show/hide the bottom-center green dot overlay for "done"
-        if state == "done" and self._overlay is None:
-            self._overlay = self._create_overlay()
-        elif state != "done" and self._overlay is not None:
-            self._overlay.close()
-            self._overlay = None
+        if self._overlay is not None:
+            if state == "done":
+                self._overlay.orderFrontRegardless()
+            else:
+                self._overlay.orderOut_(None)
 
         self._status_item.title = _STATUS_LABELS.get(state, _STATUS_LABELS["idle"])
 
