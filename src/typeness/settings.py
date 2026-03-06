@@ -11,6 +11,7 @@ _SETTINGS_PATH = _SETTINGS_DIR / "settings.json"
 
 _DEFAULTS: dict[str, bool | str | int] = {
     "show_menubar_icon_always": False,
+    "debug_mode": False,
 }
 
 
@@ -45,4 +46,13 @@ class Settings:
     @show_menubar_icon_always.setter
     def show_menubar_icon_always(self, value: bool) -> None:
         self._data["show_menubar_icon_always"] = value
+        self.save()
+
+    @property
+    def debug_mode(self) -> bool:
+        return bool(self._data.get("debug_mode", False))
+
+    @debug_mode.setter
+    def debug_mode(self, value: bool) -> None:
+        self._data["debug_mode"] = value
         self.save()

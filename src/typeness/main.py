@@ -114,7 +114,7 @@ def _event_loop(
                     menu_app.set_state("done")  # reverts to idle automatically after 1.5s
 
                     # Debug capture (after paste so it doesn't affect perceived latency)
-                    if debug:
+                    if debug or menu_app._app_settings.debug_mode:
                         save_capture(
                             audio, whisper_text, processed_text,
                             rec_duration, whisper_elapsed, llm_elapsed,
@@ -156,11 +156,8 @@ def main(*, debug: bool = False):
         print(f"Debug mode ON — captures saved to {DEBUG_DIR}/")
     print("Loading models, please wait...\n")
 
-    model_path = load_whisper()
-    llm_model, tokenizer = load_llm()
-
-    from ApplicationServices import AXIsProcessTrusted
-    hotkey_available = AXIsProcessTrusted()
+    from ApplicationServices import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
+    hotkey_available = AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True})
 
     event_queue: queue.Queue[str] = queue.Queue()
     cancel_event = threading.Event()
@@ -177,8 +174,22 @@ def main(*, debug: bool = False):
         event_queue, cleanup, cancel_event,
         accessibility_granted=hotkey_available,
     )
+    menu_app.set_state("loading")
 
-    if hotkey_available:
+    def _init_models_and_start_worker():
+        print("Loading models, please wait...\n")
+        model_path = load_whisper()
+        llm_model, tokenizer = load_llm()
+
+        menu_app.set_state("idle")
+
+        from ApplicationServices import AXIsProcessTrusted
+        while not AXIsProcessTrusted():
+            time.sleep(1.0)
+            if shutdown_event.is_set():
+                return
+        menu_app.clear_accessibility_error()
+
         listener.start()
         worker = threading.Thread(
             target=_event_loop,
@@ -189,6 +200,11 @@ def main(*, debug: bool = False):
         worker.start()
         print("\nReady! Press Shift+Control+A or click the menu bar icon to start/stop voice input.")
         print("Press Ctrl+C or use the menu bar icon to exit.\n")
+
+    init_thread = threading.Thread(target=_init_models_and_start_worker, daemon=True)
+    init_thread.start()
+
+
 
     # Blocks the main thread — rumps handles the macOS event loop
     menu_app.run()

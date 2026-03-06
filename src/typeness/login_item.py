@@ -4,6 +4,7 @@ Installs/uninstalls a LaunchAgent plist so Typeness starts automatically at logi
 """
 
 import os
+import sys
 import shutil
 import subprocess
 from pathlib import Path
@@ -13,7 +14,24 @@ _PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{_PLIST_LABEL}.plist"
 _PROJECT_DIR = Path(__file__).resolve().parents[2]  # repo root: src/typeness/login_item.py -> src/typeness -> src -> repo
 
 
-def _build_plist(uv_path: str, project_dir: str) -> str:
+def is_installed() -> bool:
+    return _PLIST_PATH.exists()
+
+
+def _build_plist() -> str:
+    if getattr(sys, 'frozen', False):
+        exe_path = sys.executable
+        args_xml = f"        <string>{exe_path}</string>"
+    else:
+        uv_path = shutil.which("uv")
+        if uv_path is None:
+            raise RuntimeError("uv not found in PATH. Please install uv first.")
+        args_xml = f"""        <string>{uv_path}</string>
+        <string>run</string>
+        <string>--project</string>
+        <string>{_PROJECT_DIR}</string>
+        <string>typeness</string>"""
+
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -23,11 +41,7 @@ def _build_plist(uv_path: str, project_dir: str) -> str:
     <string>{_PLIST_LABEL}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{uv_path}</string>
-        <string>run</string>
-        <string>--project</string>
-        <string>{project_dir}</string>
-        <string>typeness</string>
+{args_xml}
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -44,12 +58,8 @@ def _build_plist(uv_path: str, project_dir: str) -> str:
 
 def install() -> None:
     """Install and load the Typeness LaunchAgent."""
-    uv_path = shutil.which("uv")
-    if uv_path is None:
-        raise RuntimeError("uv not found in PATH. Please install uv first.")
-
     _PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _PLIST_PATH.write_text(_build_plist(uv_path, str(_PROJECT_DIR)))
+    _PLIST_PATH.write_text(_build_plist())
 
     # Unload first (ignore error if not loaded)
     subprocess.run(["launchctl", "unload", str(_PLIST_PATH)],
