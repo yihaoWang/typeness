@@ -38,7 +38,28 @@ def _event_loop(
         try:
             if event == EVENT_START_RECORDING:
                 menu_app.set_state("recording")
-                record_audio_start()
+                # Run record_audio_start() in a thread — sd.InputStream.start() can
+                # block indefinitely if CoreAudio is interrupted (e.g. after Space switch).
+                _start_error: list[Exception | None] = [None]
+                _start_done = threading.Event()
+
+                def _do_start() -> None:
+                    try:
+                        record_audio_start()
+                    except Exception as exc:
+                        _start_error[0] = exc
+                    finally:
+                        _start_done.set()
+
+                threading.Thread(target=_do_start, daemon=True).start()
+                if not _start_done.wait(timeout=5.0):
+                    print("[audio] record_audio_start timed out — resetting state")
+                    stop_stream()
+                    listener._recording = False
+                    menu_app.set_state("idle")
+                    continue
+                if _start_error[0] is not None:
+                    raise _start_error[0]
 
             elif event == EVENT_CANCEL:
                 # Handled directly via cancel_event.set() from hotkey/menu;

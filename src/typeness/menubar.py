@@ -287,7 +287,7 @@ class TypenessMenuBar(rumps.App):
         win.setAlphaValue_(0.80)
         win.setLevel_(999)
         win.setIgnoresMouseEvents_(True)
-        win.setCollectionBehavior_(1 << 2)
+        win.setCollectionBehavior_(1 << 1)  # NSWindowCollectionBehaviorMoveToActiveSpace
         win.setReleasedWhenClosed_(False)
 
         bg = NSView.alloc().initWithFrame_(((0, 0), (size, size)))
@@ -324,7 +324,7 @@ class TypenessMenuBar(rumps.App):
         win.setAlphaValue_(0.0)
         win.setLevel_(999)
         win.setIgnoresMouseEvents_(True)
-        win.setCollectionBehavior_(1 << 2)
+        win.setCollectionBehavior_(1 << 1)  # NSWindowCollectionBehaviorMoveToActiveSpace
         win.setReleasedWhenClosed_(False)
 
         bg = NSView.alloc().initWithFrame_(((0, 0), (size, size)))
