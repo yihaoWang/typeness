@@ -9,3 +9,11 @@ tests/fixtures/*
 
 # Platform-specific overrides (local development)
 pyproject.local.toml
+pyproject.mac.toml
+pyproject.toml.cuda-backup
+
+# PyInstaller
+build/
+dist/
+*.spec
+*.app

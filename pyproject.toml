@@ -25,3 +25,8 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/typeness"]
 
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.19.0",
+]
+

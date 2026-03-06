@@ -40,6 +40,8 @@ def cli():
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
     try:
         cli()
     except KeyboardInterrupt:
