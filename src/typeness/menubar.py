@@ -214,6 +214,7 @@ class TypenessMenuBar(rumps.App):
         self._frame = 0
         self._done_until: float = 0
         self._overlay: NSWindow | None = None
+        self._recording_overlay: NSWindow | None = None
         self._accessibility_error: bool = not accessibility_granted
 
         self._app_settings = Settings()
@@ -240,9 +241,10 @@ class TypenessMenuBar(rumps.App):
         # Hide from Dock and main menu bar — run as a pure status-bar-only app
         rumps.events.before_start.register(self._hide_from_dock)
 
-        # Build overlay once; show/hide via orderFrontRegardless/orderOut to avoid
+        # Build overlays once; show/hide via orderFrontRegardless/orderOut to avoid
         # repeatedly creating windows which disrupts the CGEventTap.
         rumps.events.before_start.register(self._setup_overlay)
+        rumps.events.before_start.register(self._setup_recording_overlay)
 
         # Poll state every 0.2s on the main thread to update the icon/menu
         self._timer = rumps.Timer(self._poll_state, 0.2)
@@ -304,6 +306,43 @@ class TypenessMenuBar(rumps.App):
         win.setContentView_(bg)
         self._overlay = win  # hidden until first "done" state
 
+    def _setup_recording_overlay(self) -> None:
+        """Build the red-dot recording indicator overlay window once at startup (hidden)."""
+        size = 30.0
+        screen_frame = NSScreen.mainScreen().frame()
+        x = (screen_frame.size.width - size) / 2
+        y = 80.0
+
+        win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+            ((x, y), (size, size)),
+            NSBorderlessWindowMask,
+            NSBackingStoreBuffered,
+            False,
+        )
+        win.setBackgroundColor_(NSColor.clearColor())
+        win.setOpaque_(False)
+        win.setAlphaValue_(0.0)
+        win.setLevel_(999)
+        win.setIgnoresMouseEvents_(True)
+        win.setCollectionBehavior_(1 << 2)
+        win.setReleasedWhenClosed_(False)
+
+        bg = NSView.alloc().initWithFrame_(((0, 0), (size, size)))
+        bg.setWantsLayer_(True)
+        bg.layer().setBackgroundColor_(NSColor.systemRedColor().CGColor())
+        bg.layer().setCornerRadius_(size / 2)
+
+        icon_size = 16.0
+        icon_origin = ((size - icon_size) / 2, (size - icon_size) / 2)
+        image = NSImage.imageWithSystemSymbolName_accessibilityDescription_("mic.fill", None)
+        image_view = NSImageView.alloc().initWithFrame_((icon_origin, (icon_size, icon_size)))
+        image_view.setImage_(image)
+        image_view.setContentTintColor_(NSColor.whiteColor())
+        bg.addSubview_(image_view)
+
+        win.setContentView_(bg)
+        self._recording_overlay = win  # hidden until recording state
+
     # --- Called from worker thread ---
 
     def set_accessibility_error(self) -> None:
@@ -357,6 +396,17 @@ class TypenessMenuBar(rumps.App):
             self._frame = 0
             # Prominent mic.fill when "show always" is on; subtle mic when off
             self._set_sf_symbol("mic.fill" if show_always else "mic")
+
+        # Show/hide the bottom-center red dot overlay for "recording"
+        if self._recording_overlay is not None:
+            if state == "recording":
+                self._recording_overlay.setAlphaValue_(0.85)
+                self._recording_overlay.orderFrontRegardless()
+            else:
+                NSAnimationContext.beginGrouping()
+                NSAnimationContext.currentContext().setDuration_(0.3)
+                self._recording_overlay.animator().setAlphaValue_(0.0)
+                NSAnimationContext.endGrouping()
 
         # Show/hide the bottom-center green dot overlay for "done"
         if self._overlay is not None:
