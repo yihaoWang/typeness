@@ -34,7 +34,7 @@ from typeness.settings import Settings
 # SF Symbol name for each state
 _SF_SYMBOLS = {
     "loading": "hourglass",
-    "recording": "mic.fill",
+    "recording": "person.wave.2.fill",
     "transcribing": "waveform",
     "processing": "waveform",
 }
@@ -184,7 +184,7 @@ class _SettingsWindow:
         cy -= 36
         self._make_checkbox("始終在選單列顯示填滿圖示", self._settings.show_menubar_icon_always, 1, cy, content)
         cy -= 36
-        content.addSubview_(self._make_description("啟用後，待機時會顯示較為顯眼的實心麥克風。\n停用時則顯示空心輪廓（低調模式）。", y=cy, height=36))
+        content.addSubview_(self._make_description("啟用後，待機時會顯示較為顯眼的實心對話圖示。\n停用時則顯示空心輪廓（低調模式）。", y=cy, height=36))
 
         # --- 2. Recording & Hotkey ---
         cy -= 45
@@ -279,7 +279,7 @@ class TypenessMenuBar(rumps.App):
     def _hide_from_dock(self):
         """Called via before_start: LSUIElement=true in Info.plist already hides Dock icon."""
         self._nsapp.nsstatusitem.setVisible_(True)
-        self._set_sf_symbol("mic")
+        self._set_sf_symbol("person.wave.2")
 
     def _set_sf_symbol(self, symbol_name: str) -> None:
         """Set the menu bar button to display an SF Symbol as a template image."""
@@ -358,7 +358,7 @@ class TypenessMenuBar(rumps.App):
 
         icon_size = 16.0
         icon_origin = ((size - icon_size) / 2, (size - icon_size) / 2)
-        image = NSImage.imageWithSystemSymbolName_accessibilityDescription_("mic.fill", None)
+        image = NSImage.imageWithSystemSymbolName_accessibilityDescription_("person.wave.2.fill", None)
         image_view = NSImageView.alloc().initWithFrame_((icon_origin, (icon_size, icon_size)))
         image_view.setImage_(image)
         image_view.setContentTintColor_(NSColor.whiteColor())
@@ -420,8 +420,8 @@ class TypenessMenuBar(rumps.App):
             self._set_sf_symbol(_SF_SYMBOLS[state])
         elif state == "idle":
             self._frame = 0
-            # Prominent mic.fill when "show always" is on; subtle mic when off
-            self._set_sf_symbol("mic.fill" if show_always else "mic")
+            # Prominent fill when "show always" is on; subtle outline when off
+            self._set_sf_symbol("person.wave.2.fill" if show_always else "person.wave.2")
 
         # Show/hide the bottom-center red dot overlay for "recording"
         if self._recording_overlay is not None:
