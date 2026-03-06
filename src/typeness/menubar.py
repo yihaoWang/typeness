@@ -33,18 +33,11 @@ from typeness.settings import Settings
 
 # SF Symbol name for each state
 _SF_SYMBOLS = {
+    "loading": "hourglass",
     "recording": "mic.fill",
     "transcribing": "waveform",
     "processing": "waveform",
 }
-
-# Spinner frames for transcribing/processing (cycling SF symbols)
-_SPINNER_SYMBOLS = [
-    "waveform",
-    "waveform.badge.microphone",
-    "waveform",
-    "mic",
-]
 
 _STATUS_LABELS = {
     "loading": "狀態：初始化中...",
@@ -422,10 +415,7 @@ class TypenessMenuBar(rumps.App):
         # in a more prominent way when idle (solid mic) vs. a dimmed mic.
         show_always = self._app_settings.show_menubar_icon_always
 
-        if state in ("loading", "transcribing", "processing"):
-            self._frame = (self._frame + 1) % len(_SPINNER_SYMBOLS)
-            self._set_sf_symbol(_SPINNER_SYMBOLS[self._frame])
-        elif state in _SF_SYMBOLS:
+        if state in _SF_SYMBOLS:
             self._frame = 0
             self._set_sf_symbol(_SF_SYMBOLS[state])
         elif state == "idle":
