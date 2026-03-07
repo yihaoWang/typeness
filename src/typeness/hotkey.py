@@ -109,9 +109,17 @@ class HotkeyListener:
                 # Cancel ongoing processing
                 if self._cancel_event is not None:
                     self._cancel_event.set()
+                self._pressed_keys.clear()
                 return
             self._recording = True
             self._queue.put(EVENT_START_RECORDING)
+
+        # Force clear pressed keys after triggering.
+        # This prevents "zombie" keys from getting stuck if macOS swallows the
+        # keyup event (common when Cmd+A triggers a system shortcut).
+        # Holding modifiers and tapping A repeatedly will require re-pressing the modifiers,
+        # which is completely acceptable for a voice dictation toggle.
+        self._pressed_keys.clear()
 
     def _on_release(self, key: Key | KeyCode, injected: bool = False) -> None:
         if injected:
