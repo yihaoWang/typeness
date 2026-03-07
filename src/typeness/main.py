@@ -10,6 +10,7 @@ import traceback
 
 from typeness.audio import MIN_RECORDING_SECONDS, SAMPLE_RATE, record_audio_start, record_audio_stop, stop_stream
 from typeness.clipboard import paste_text
+from typeness.settings import app_settings
 from typeness.debug import DEBUG_DIR, save_capture
 from typeness.hotkey import EVENT_CANCEL, EVENT_START_RECORDING, EVENT_STOP_RECORDING, HotkeyListener
 from typeness.menubar import TypenessMenuBar
@@ -111,9 +112,13 @@ def _event_loop(
 
                     total_elapsed = whisper_elapsed + llm_elapsed
 
-                    # Auto-paste to focused window
-                    paste_text(processed_text)
                     menu_app.set_state("done")  # reverts to idle automatically after 1.5s
+                    
+                    if app_settings.confirm_before_inserting:
+                        print("Auto-paste disabled via settings.")
+                    else:
+                        # Auto-paste to focused window
+                        paste_text(processed_text)
 
                     # Debug capture (after paste so it doesn't affect perceived latency)
                     if debug or menu_app._app_settings.debug_mode:
@@ -149,7 +154,7 @@ def _event_loop(
             listener.busy = False
             listener._recording = False
             menu_app.set_state("idle")
-
+            
 
 def main(*, debug: bool = False):
     """Load models, start worker thread, then run the menu bar app on the main thread."""
@@ -176,6 +181,11 @@ def main(*, debug: bool = False):
         event_queue, cleanup, cancel_event,
         accessibility_granted=hotkey_available,
     )
+
+    def on_settings_changed():
+        listener.reload_config()
+    menu_app.set_settings_callback(on_settings_changed)
+
     menu_app.set_state("loading")
 
     def _init_models_and_start_worker():
