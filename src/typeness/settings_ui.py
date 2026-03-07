@@ -156,32 +156,43 @@ class SettingsUI:
     def _create_box(self, frame):
         box = AppKit.NSBox.alloc().initWithFrame_(frame)
         box.setBoxType_(AppKit.NSBoxCustom)
-        box.setBorderType_(AppKit.NSLineBorder)
-        box.setBorderColor_(AppKit.NSColor.quaternaryLabelColor())
-        box.setBorderWidth_(1.0)
+        box.setBorderType_(AppKit.NSNoBorder)
         box.setCornerRadius_(8.0)
         box.setContentViewMargins_(Foundation.NSMakeSize(0, 0))
-        box.setFillColor_(AppKit.NSColor.selectedTextBackgroundColor().colorWithAlphaComponent_(0.1))
+        box.setFillColor_(AppKit.NSColor.controlBackgroundColor())
         return box
 
     def _create_separator(self, frame):
         sep = AppKit.NSBox.alloc().initWithFrame_(frame)
         sep.setBoxType_(AppKit.NSBoxCustom)
         sep.setBorderType_(AppKit.NSNoBorder)
-        sep.setFillColor_(AppKit.NSColor.quaternaryLabelColor())
+        sep.setFillColor_(AppKit.NSColor.separatorColor().colorWithAlphaComponent_(0.5))
         return sep
 
-    def _create_section_header(self, content, x, y, box_w, sf_symbol, title, color=None):
-        """Create a section header with SF Symbol icon + label."""
-        if color is None:
-            color = AppKit.NSColor.systemTealColor()
-        img = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_(sf_symbol, None)
-        iv = AppKit.NSImageView.alloc().initWithFrame_(Foundation.NSMakeRect(x, y, 18, 18))
-        iv.setImage_(img)
-        iv.setContentTintColor_(color)
-        content.addSubview_(iv)
-        lbl = self._create_label(Foundation.NSMakeRect(x + 24, y, 200, 18), title, 13, AppKit.NSFontWeightSemibold)
+    def _create_section_header(self, content, x, y, box_w, title, height=16):
+        """Create a section header with uppercase label. y is the bottom edge."""
+        lbl = self._create_label(Foundation.NSMakeRect(x + 16, y, 200, height), title.upper(), 11, AppKit.NSFontWeightSemibold, AppKit.NSColor.secondaryLabelColor())
         content.addSubview_(lbl)
+
+    def _create_colored_icon(self, frame, sf_symbol, bg_color):
+        """Create an iOS-style settings icon (white symbol on colored rounded rect)."""
+        box = AppKit.NSBox.alloc().initWithFrame_(frame)
+        box.setBoxType_(AppKit.NSBoxCustom)
+        box.setBorderType_(AppKit.NSNoBorder)
+        box.setCornerRadius_(6.0)
+        box.setFillColor_(bg_color)
+
+        # Draw the SF symbol centered in the container
+        img = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_(sf_symbol, None)
+        if img:
+            conf = AppKit.NSImageSymbolConfiguration.configurationWithPointSize_weight_scale_(14, AppKit.NSFontWeightSemibold, AppKit.NSImageSymbolScaleMedium)
+            img = img.imageByApplyingSymbolConfiguration_(conf) if hasattr(img, 'imageByApplyingSymbolConfiguration_') else img.imageWithSymbolConfiguration_(conf) if hasattr(img, 'imageWithSymbolConfiguration_') else img
+            iv = AppKit.NSImageView.alloc().initWithFrame_(Foundation.NSMakeRect(0, 0, frame.size.width, frame.size.height))
+            iv.setImage_(img)
+            iv.setContentTintColor_(AppKit.NSColor.whiteColor())
+            box.addSubview_(iv)
+
+        return box
 
     def _check_mic_permission(self):
         """Check microphone permission status via AVCaptureDevice."""
@@ -198,45 +209,63 @@ class SettingsUI:
         from ApplicationServices import AXIsProcessTrusted
         return AXIsProcessTrusted()
 
-    def _add_two_row_box(self, content, cy, margin, box_w, rows):
-        """Create a rounded box with two rows of content.
+    def _add_settings_group(self, content, y, margin, box_w, box_h, rows):
+        """Create a rounded box with rows of content at the specified Y (bottom edge).
 
-        Each row is a dict with keys: title, subtitle, and one of:
+        Each row is a dict with keys: title, subtitle, icon, icon_color, and one of:
           widget='switch', value=bool, target=obj, action=str
           widget='shortcut', setting_key=str, on_change=callable
           widget='status', granted=bool, target=obj, action=str
-        Returns the new cy after the box.
         """
-        box_h = 100
-        row_h = 42
-        pad_top = 8
+        row_h = 52
         pad_x = 16
+        icon_size = 28
+        icon_margin_right = 16
 
-        box = self._create_box(Foundation.NSMakeRect(margin, cy - box_h, box_w, box_h))
+        box = self._create_box(Foundation.NSMakeRect(margin, y, box_w, box_h))
 
         for i, row in enumerate(rows):
-            ry = box_h - pad_top - row_h * i - row_h // 2
+            ry = box_h - row_h * (i + 1)
 
-            # Title + subtitle
-            lbl = self._create_label(
-                Foundation.NSMakeRect(pad_x, ry + 4, box_w - 160, 18),
-                row["title"], 13, AppKit.NSFontWeightMedium)
-            sub = self._create_label(
-                Foundation.NSMakeRect(pad_x, ry - 12, box_w - 160, 15),
-                row["subtitle"], 11, AppKit.NSFontWeightRegular, AppKit.NSColor.secondaryLabelColor())
-            box.addSubview_(lbl)
-            box.addSubview_(sub)
+            # Left side: colored icon
+            icon_x = pad_x
+            icon_y = ry + (row_h - icon_size) / 2
+            icon_view = self._create_colored_icon(
+                Foundation.NSMakeRect(icon_x, icon_y, icon_size, icon_size),
+                row["icon"], row["icon_color"]
+            )
+            box.addSubview_(icon_view)
+
+            text_x = icon_x + icon_size + icon_margin_right
+
+            # Subtitle check
+            if row.get("subtitle"):
+                # Title + subtitle vertically stacked
+                lbl = self._create_label(
+                    Foundation.NSMakeRect(text_x, ry + row_h/2, box_w - text_x - 120, 18),
+                    row["title"], 13, AppKit.NSFontWeightMedium)
+                sub = self._create_label(
+                    Foundation.NSMakeRect(text_x, ry + row_h/2 - 16, box_w - text_x - 120, 15),
+                    row["subtitle"], 11, AppKit.NSFontWeightRegular, AppKit.NSColor.secondaryLabelColor())
+                box.addSubview_(lbl)
+                box.addSubview_(sub)
+            else:
+                # Just title vertically centered
+                lbl = self._create_label(
+                    Foundation.NSMakeRect(text_x, ry + (row_h - 18)/2, box_w - text_x - 120, 18),
+                    row["title"], 13, AppKit.NSFontWeightMedium)
+                box.addSubview_(lbl)
 
             # Right-side widget
             w = row.get("widget")
             if w == "switch":
-                sw = AppKit.NSSwitch.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 60, ry - 2, 40, 24))
+                sw = AppKit.NSSwitch.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 60, ry + (row_h - 24)/2, 40, 24))
                 sw.setState_(AppKit.NSControlStateValueOn if row["value"] else AppKit.NSControlStateValueOff)
                 sw.setTarget_(row["target"])
                 sw.setAction_(row["action"])
                 box.addSubview_(sw)
             elif w == "shortcut":
-                btn = ShortcutButton.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 90, ry - 2, 72, 24))
+                btn = ShortcutButton.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 96, ry + (row_h - 24)/2, 80, 24))
                 btn.setBezelStyle_(AppKit.NSRoundRectBezelStyle)
                 btn.setting_key = row["setting_key"]
                 btn.on_change = row["on_change"]
@@ -245,12 +274,12 @@ class SettingsUI:
             elif w == "status":
                 if row["granted"]:
                     st = self._create_label(
-                        Foundation.NSMakeRect(box_w - 110, ry, 90, 18),
-                        "Granted", 12, AppKit.NSFontWeightMedium, AppKit.NSColor.systemGreenColor())
+                        Foundation.NSMakeRect(box_w - 110, ry + (row_h - 18)/2, 94, 18),
+                        "Granted", 13, AppKit.NSFontWeightRegular, AppKit.NSColor.systemGreenColor())
                     st.setAlignment_(AppKit.NSTextAlignmentRight)
                     box.addSubview_(st)
                 else:
-                    btn = AppKit.NSButton.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 120, ry - 4, 104, 24))
+                    btn = AppKit.NSButton.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 120, ry + (row_h - 24)/2, 104, 24))
                     btn.setTitle_("Open Settings")
                     btn.setBezelStyle_(AppKit.NSRoundRectBezelStyle)
                     btn.setContentTintColor_(AppKit.NSColor.systemGreenColor())
@@ -260,30 +289,48 @@ class SettingsUI:
 
             # Separator between rows (not after last)
             if i < len(rows) - 1:
-                sep_y = box_h - pad_top - row_h * (i + 1)
-                box.addSubview_(self._create_separator(Foundation.NSMakeRect(pad_x, sep_y, box_w - pad_x * 2, 1)))
+                sep_y = ry
+                box.addSubview_(self._create_separator(Foundation.NSMakeRect(text_x, sep_y, box_w - text_x, 1)))
 
         content.addSubview_(box)
-        return cy - box_h
 
     def build(self):
         # Layout constants
-        width = 480
-        margin = 24
+        width = 460
+        margin = 32
         box_w = width - margin * 2
-        section_gap = 28       # space between box bottom and next section header
-        header_box_gap = 8     # space between section header and its box
-        box_h = 100            # two-row box height
+        
+        section_lbl_h = 16
+        header_box_gap = 6     # space between section header bottom and box top
+        section_gap = 24       # space between box bottom and next section header top
+        
+        box_1_h = 52 * 2
+        box_2_h = 52 * 2
+        box_3_h = 52 * 2
+
+        # Header components vertical sizes
+        top_margin = 32
+        icon_size = 64
+        icon_gap = 12
+        title_size = 28
+        title_gap = 4
+        status_size = 20
+        status_gap = 32
+        
+        header_h = top_margin + icon_size + icon_gap + title_size + title_gap + status_size + status_gap
 
         # Compute total height top-down
-        # titlebar(28) + top_pad(20) + status(40) + sep_gap(20)
-        # + 3 × (header(20) + header_box_gap + box_h + section_gap) - last section_gap + bottom_pad(24)
-        content_h = 28 + 20 + 40 + 20 + 3 * (20 + header_box_gap + box_h + section_gap) - section_gap + 24
+        content_h = header_h + \
+            (section_lbl_h + header_box_gap + box_1_h) + section_gap + \
+            (section_lbl_h + header_box_gap + box_2_h) + section_gap + \
+            (section_lbl_h + header_box_gap + box_3_h) + 32
+            
         height = content_h
 
         screen_frame = AppKit.NSScreen.mainScreen().frame()
         x = (screen_frame.size.width - width) / 2
-        y = (screen_frame.size.height - height) / 2
+        # Position slightly higher than center
+        y = (screen_frame.size.height - height) / 2 + 50
 
         self.window = AppKit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
             ((x, y), (width, height)),
@@ -291,7 +338,7 @@ class SettingsUI:
             AppKit.NSBackingStoreBuffered,
             False,
         )
-        self.window.setTitle_("Typeness")
+        self.window.setTitle_("Settings")
         self.window.setTitlebarAppearsTransparent_(True)
         self.window.setReleasedWhenClosed_(False)
         self.window.setDelegate_(self.controller)
@@ -302,70 +349,109 @@ class SettingsUI:
         content.setState_(AppKit.NSVisualEffectStateActive)
         self.window.setContentView_(content)
 
-        cy = height - 48  # below titlebar
-        box_w = width - margin * 2
+        # Coordinate `cy` represents the bottom edge of the next element drawn top-down
+        cy = height
 
         # ── Status header ──
-        icon_img = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_("person.wave.2.fill", None)
-        icon_view = AppKit.NSImageView.alloc().initWithFrame_(Foundation.NSMakeRect(margin, cy, 32, 32))
+        cy -= top_margin
+        
+        cy -= icon_size
+        import os
+        import sys
+        
+        icon_path = None
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            icon_path = os.path.join(sys._MEIPASS, "icon.icns")
+        else:
+            icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "icon.icns")
+            
+        icon_img = None
+        if icon_path and os.path.exists(icon_path):
+            icon_img = AppKit.NSImage.alloc().initWithContentsOfFile_(icon_path)
+            
+        if not icon_img:
+            icon_img = AppKit.NSApplication.sharedApplication().applicationIconImage()
+            
+        if not icon_img:
+            icon_img = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_("macwindow", None)
+            
+        icon_view = AppKit.NSImageView.alloc().initWithFrame_(Foundation.NSMakeRect((width - icon_size)/2, cy, icon_size, icon_size))
         icon_view.setImage_(icon_img)
-        icon_view.setContentTintColor_(AppKit.NSColor.systemGreenColor())
         content.addSubview_(icon_view)
-
-        title = self._create_label(Foundation.NSMakeRect(margin + 42, cy + 14, 200, 20), "Typeness", 16, AppKit.NSFontWeightSemibold)
+        
+        cy -= icon_gap
+        cy -= title_size
+        title = self._create_label(Foundation.NSMakeRect((width - 200)/2, cy, 200, title_size), "Typeness", 18, AppKit.NSFontWeightBold)
+        title.setAlignment_(AppKit.NSTextAlignmentCenter)
         content.addSubview_(title)
-
-        status_dot = self._create_label(Foundation.NSMakeRect(margin + 42, cy - 2, 10, 16), "●", 10, AppKit.NSFontWeightBold, AppKit.NSColor.systemGreenColor())
-        status_text = self._create_label(Foundation.NSMakeRect(margin + 52, cy - 2, 100, 16), "Ready", 12, AppKit.NSFontWeightRegular, AppKit.NSColor.secondaryLabelColor())
-        content.addSubview_(status_dot)
-        content.addSubview_(status_text)
-
-        cy -= 20
-        content.addSubview_(self._create_separator(Foundation.NSMakeRect(margin, cy, box_w, 1)))
-        cy -= 20
+        
+        cy -= title_gap
+        cy -= status_size
+        status_container_w = 80
+        status_container = AppKit.NSView.alloc().initWithFrame_(Foundation.NSMakeRect((width - status_container_w)/2, cy, status_container_w, status_size))
+        status_dot = self._create_label(Foundation.NSMakeRect(10, 2, 12, 16), "●", 10, AppKit.NSFontWeightBold, AppKit.NSColor.systemGreenColor())
+        status_text = self._create_label(Foundation.NSMakeRect(24, 2, 60, 16), "Ready", 12, AppKit.NSFontWeightMedium, AppKit.NSColor.secondaryLabelColor())
+        status_container.addSubview_(status_dot)
+        status_container.addSubview_(status_text)
+        content.addSubview_(status_container)
+        
+        cy -= status_gap
 
         # ── Visual Indicator ──
-        self._create_section_header(content, margin, cy, box_w, "eye", "Visual Indicator")
-        cy -= 20 + header_box_gap
-        cy = self._add_two_row_box(content, cy, margin, box_w, [
+        cy -= section_lbl_h
+        self._create_section_header(content, margin, cy, box_w, "Visual Indicator", height=section_lbl_h)
+        cy -= header_box_gap
+        cy -= box_1_h
+        self._add_settings_group(content, cy, margin, box_w, box_1_h, [
             {"title": "Show visual indicator",
-             "subtitle": "Display a central icon when Typeness is processing",
+             "subtitle": "Display a central icon when processing",
+             "icon": "eye.fill", "icon_color": AppKit.NSColor.systemBlueColor(),
              "widget": "switch", "value": app_settings.show_floating_window,
              "target": self.controller, "action": "showFloatingChanged:"},
             {"title": "Confirm before inserting",
-             "subtitle": "Review transcription before inserting at cursor",
+             "subtitle": "Review transcription before inserting",
+             "icon": "text.badge.checkmark", "icon_color": AppKit.NSColor.systemGreenColor(),
              "widget": "switch", "value": app_settings.confirm_before_inserting,
              "target": self.controller, "action": "confirmInsertChanged:"},
         ])
-        cy -= section_gap
 
         # ── Shortcuts ──
-        self._create_section_header(content, margin, cy, box_w, "keyboard", "Shortcuts")
-        cy -= 20 + header_box_gap
-        cy = self._add_two_row_box(content, cy, margin, box_w, [
+        cy -= section_gap
+        cy -= section_lbl_h
+        self._create_section_header(content, margin, cy, box_w, "Shortcuts", height=section_lbl_h)
+        cy -= header_box_gap
+        cy -= box_2_h
+        self._add_settings_group(content, cy, margin, box_w, box_2_h, [
             {"title": "Push-to-talk",
              "subtitle": "Hold to record, release to transcribe",
+             "icon": "mic.fill", "icon_color": AppKit.NSColor.systemRedColor(),
              "widget": "shortcut", "setting_key": "shortcut_push_to_talk",
              "on_change": self.on_change},
             {"title": "Toggle mode",
              "subtitle": "Press to start/stop recording",
+             "icon": "keyboard.fill", "icon_color": AppKit.NSColor.systemPurpleColor(),
              "widget": "shortcut", "setting_key": "shortcut_toggle_mode",
              "on_change": self.on_change},
         ])
-        cy -= section_gap
 
         # ── Permissions ──
         mic_granted = self._check_mic_permission()
         acc_granted = self._check_accessibility_permission()
-        self._create_section_header(content, margin, cy, box_w, "shield.lefthalf.filled", "Permissions")
-        cy -= 20 + header_box_gap
-        cy = self._add_two_row_box(content, cy, margin, box_w, [
+        
+        cy -= section_gap
+        cy -= section_lbl_h
+        self._create_section_header(content, margin, cy, box_w, "Permissions", height=section_lbl_h)
+        cy -= header_box_gap
+        cy -= box_3_h
+        self._add_settings_group(content, cy, margin, box_w, box_3_h, [
             {"title": "Microphone",
              "subtitle": "Required for voice recording",
+             "icon": "mic.fill", "icon_color": AppKit.NSColor.systemOrangeColor(),
              "widget": "status", "granted": mic_granted,
              "target": self.controller, "action": "openMicSettings:"},
             {"title": "Accessibility",
              "subtitle": "Required for text insertion",
+             "icon": "figure.stand", "icon_color": AppKit.NSColor.systemBlueColor(),
              "widget": "status", "granted": acc_granted,
              "target": self.controller, "action": "openAccSettings:"},
         ])
