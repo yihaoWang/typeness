@@ -311,13 +311,9 @@ class SettingsUI:
         # Header components vertical sizes
         top_margin = 32
         icon_size = 64
-        icon_gap = 12
-        title_size = 28
-        title_gap = 4
-        status_size = 20
         status_gap = 32
         
-        header_h = top_margin + icon_size + icon_gap + title_size + title_gap + status_size + status_gap
+        header_h = top_margin + icon_size + status_gap
 
         # Compute total height top-down
         content_h = header_h + \
@@ -356,6 +352,8 @@ class SettingsUI:
         cy -= top_margin
         
         cy -= icon_size
+        header_y = cy
+        
         import os
         import sys
         
@@ -375,22 +373,27 @@ class SettingsUI:
         if not icon_img:
             icon_img = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_("macwindow", None)
             
-        icon_view = AppKit.NSImageView.alloc().initWithFrame_(Foundation.NSMakeRect((width - icon_size)/2, cy, icon_size, icon_size))
+        header_content_w = 64 + 16 + 120  # icon + gap + text
+        start_x = (width - header_content_w) / 2
+            
+        icon_view = AppKit.NSImageView.alloc().initWithFrame_(Foundation.NSMakeRect(start_x, header_y, icon_size, icon_size))
         icon_view.setImage_(icon_img)
         content.addSubview_(icon_view)
         
-        cy -= icon_gap
-        cy -= title_size
-        title = self._create_label(Foundation.NSMakeRect((width - 200)/2, cy, 200, title_size), "Typeness", 18, AppKit.NSFontWeightBold)
-        title.setAlignment_(AppKit.NSTextAlignmentCenter)
+        text_x = start_x + icon_size + 16
+        
+        # Text block is 28 (title) + 4 (gap) + 20 (status) = 52. 
+        # Center in 64 height icon: (64-52)/2 = 6 pad
+        status_y = header_y + 6
+        title_y = status_y + 20 + 4
+        
+        title = self._create_label(Foundation.NSMakeRect(text_x, title_y, 120, 28), "Typeness", 20, AppKit.NSFontWeightBold)
+        title.setAlignment_(AppKit.NSTextAlignmentLeft)
         content.addSubview_(title)
         
-        cy -= title_gap
-        cy -= status_size
-        status_container_w = 80
-        status_container = AppKit.NSView.alloc().initWithFrame_(Foundation.NSMakeRect((width - status_container_w)/2, cy, status_container_w, status_size))
-        status_dot = self._create_label(Foundation.NSMakeRect(10, 2, 12, 16), "●", 10, AppKit.NSFontWeightBold, AppKit.NSColor.systemGreenColor())
-        status_text = self._create_label(Foundation.NSMakeRect(24, 2, 60, 16), "Ready", 12, AppKit.NSFontWeightMedium, AppKit.NSColor.secondaryLabelColor())
+        status_container = AppKit.NSView.alloc().initWithFrame_(Foundation.NSMakeRect(text_x, status_y, 100, 20))
+        status_dot = self._create_label(Foundation.NSMakeRect(0, 2, 12, 16), "●", 10, AppKit.NSFontWeightBold, AppKit.NSColor.systemGreenColor())
+        status_text = self._create_label(Foundation.NSMakeRect(14, 2, 60, 16), "Ready", 13, AppKit.NSFontWeightMedium, AppKit.NSColor.secondaryLabelColor())
         status_container.addSubview_(status_dot)
         status_container.addSubview_(status_text)
         content.addSubview_(status_container)
