@@ -23,8 +23,10 @@ from AppKit import (
     NSScreen,
     NSTextField,
     NSTitledWindowMask,
+    NSPanel,
     NSView,
     NSWindow,
+    NSWindowStyleMaskNonactivatingPanel,
 )
 from Foundation import NSMakeRect, NSMakeSize, NSObject
 
@@ -57,168 +59,9 @@ _TOGGLE_LABELS = {
 
 
 # ---------------------------------------------------------------------------
-# Settings window
+# Settings window (Handled by settings_ui.py)
 # ---------------------------------------------------------------------------
-
-class _SettingsDelegate(NSObject):
-    """NSWindow delegate and checkbox target for the settings panel."""
-
-    _settings: object = None
-    _on_change: object = None
-
-    def windowShouldClose_(self, sender):
-        sender.orderOut_(None)
-        return False
-
-    def checkboxChanged_(self, sender):
-        tag = sender.tag()
-        value = sender.state() == 1
-
-        if tag == 1:
-            self._settings.show_menubar_icon_always = value
-            if self._on_change:
-                self._on_change("show_menubar_icon_always", value)
-        elif tag == 2:
-            self._settings.debug_mode = value
-            if self._on_change:
-                self._on_change("debug_mode", value)
-        elif tag == 3:
-            import typeness.login_item as login_item
-            try:
-                if value:
-                    login_item.install()
-                else:
-                    login_item.uninstall()
-            except Exception as e:
-                print(f"[Settings] Error toggling login item: {e}")
-                sender.setState_(0 if value else 1)
-
-
-class _SettingsWindow:
-    """Native AppKit settings panel for Typeness."""
-
-    _WIDTH = 420
-    _HEIGHT = 440
-
-    def __init__(self, app_settings: Settings) -> None:
-        self._settings = app_settings
-        self._window: NSWindow | None = None
-        self._delegate = _SettingsDelegate.alloc().init()
-        self._delegate._settings = self._settings
-
-    def _make_section_header(self, text: str, y: float) -> NSTextField:
-        tf = NSTextField.alloc().initWithFrame_(NSMakeRect(20, y, self._WIDTH - 40, 20))
-        tf.setStringValue_(text)
-        tf.setEditable_(False)
-        tf.setBordered_(False)
-        tf.setBackgroundColor_(NSColor.clearColor())
-        tf.setFont_(NSFont.boldSystemFontOfSize_(12.0))
-        tf.setTextColor_(NSColor.secondaryLabelColor())
-        return tf
-
-    def _make_separator(self, y: float, content_view) -> None:
-        sep = NSBox.alloc().initWithFrame_(NSMakeRect(20, y, self._WIDTH - 40, 1))
-        sep.setBoxType_(2)
-        content_view.addSubview_(sep)
-
-    def _make_checkbox(self, title: str, state: bool, tag: int, y: float, content_view) -> NSButton:
-        cb = NSButton.alloc().initWithFrame_(NSMakeRect(20, y, self._WIDTH - 40, 24))
-        cb.setButtonType_(6)  # NSSwitchButton
-        cb.setTitle_(title)
-        cb.setState_(1 if state else 0)
-        cb.setTarget_(self._delegate)
-        cb.setAction_("checkboxChanged:")
-        cb.setTag_(tag)
-        cb.setFont_(NSFont.systemFontOfSize_(13.0))
-        content_view.addSubview_(cb)
-        return cb
-
-    def _make_description(self, text: str, y: float, height: float = 32) -> NSTextField:
-        tf = NSTextField.alloc().initWithFrame_(NSMakeRect(40, y, self._WIDTH - 60, height))
-        tf.setStringValue_(text)
-        tf.setEditable_(False)
-        tf.setBordered_(False)
-        tf.setBackgroundColor_(NSColor.clearColor())
-        tf.setFont_(NSFont.systemFontOfSize_(11.0))
-        tf.setTextColor_(NSColor.secondaryLabelColor())
-        return tf
-
-    def _build(self) -> None:
-        import typeness.login_item as login_item
-
-        screen_frame = NSScreen.mainScreen().frame()
-        x = (screen_frame.size.width - self._WIDTH) / 2
-        y = (screen_frame.size.height - self._HEIGHT) / 2
-
-        win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            ((x, y), (self._WIDTH, self._HEIGHT)),
-            NSTitledWindowMask | NSClosableWindowMask,
-            NSBackingStoreBuffered,
-            False,
-        )
-        win.setTitle_("Typeness 設定")
-        win.setReleasedWhenClosed_(False)
-        win.setDelegate_(self._delegate)
-        win.setMinSize_(NSMakeSize(self._WIDTH, self._HEIGHT))
-        win.setMaxSize_(NSMakeSize(self._WIDTH, self._HEIGHT))
-
-        # Transparent title bar for native feel
-        win.setTitlebarAppearsTransparent_(True)
-
-        content = win.contentView()
-
-        # Build UI bottom-up using absolute y coordinates. cy = cursor y
-        cy = self._HEIGHT - 45
-
-        # --- 1. General ---
-        content.addSubview_(self._make_section_header("一般常規", y=cy))
-        cy -= 12
-        self._make_separator(cy, content)
-
-        cy -= 36
-        is_startup = login_item.is_installed()
-        self._make_checkbox("登入時自動啟動 Typeness", is_startup, 3, cy, content)
-        cy -= 20
-        content.addSubview_(self._make_description("設定當電腦開機或登入時，自動於背景執行此應用程式。", y=cy, height=20))
-
-        cy -= 36
-        self._make_checkbox("始終在選單列顯示填滿圖示", self._settings.show_menubar_icon_always, 1, cy, content)
-        cy -= 36
-        content.addSubview_(self._make_description("啟用後，待機時會顯示較為顯眼的實心對話圖示。\n停用時則顯示空心輪廓（低調模式）。", y=cy, height=36))
-
-        # --- 2. Recording & Hotkey ---
-        cy -= 45
-        content.addSubview_(self._make_section_header("快捷鍵", y=cy))
-        cy -= 12
-        self._make_separator(cy, content)
-
-        cy -= 28
-        content.addSubview_(self._make_description("開始 / 停止錄音：  ⇧ Command A", y=cy, height=20))
-        cy -= 20
-        content.addSubview_(self._make_description("您可以在任何應用程式中按下此快捷鍵觸發轉換。", y=cy, height=20))
-
-        # --- 3. Advanced ---
-        cy -= 45
-        content.addSubview_(self._make_section_header("除錯與進階", y=cy))
-        cy -= 12
-        self._make_separator(cy, content)
-
-        cy -= 36
-        self._make_checkbox("開啟除錯日誌模式 (Debug Mode)", self._settings.debug_mode, 2, cy, content)
-        cy -= 36
-        content.addSubview_(self._make_description("若遇到聽寫判定不佳，可開啟此功能以便記錄。\n音檔及結果將保留至 ~/Typeness/debug/。 （暫定）", y=cy, height=36))
-
-        self._window = win
-
-    def show(self, on_change_callback) -> None:
-        """Show (or bring to front) the settings window."""
-        if self._window is None:
-            self._build()
-        self._delegate._on_change = on_change_callback
-        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
-        self._window.orderFrontRegardless()
-
-
+from typeness.settings_ui import SettingsUI
 
 # ---------------------------------------------------------------------------
 # Menu bar app
@@ -242,7 +85,8 @@ class TypenessMenuBar(rumps.App):
         self._accessibility_error: bool = not accessibility_granted
 
         self._app_settings = Settings()
-        self._settings_win = _SettingsWindow(self._app_settings)
+        self._settings_win = SettingsUI(self._on_setting_changed)
+        self._external_settings_callback = None
 
         self._status_item = rumps.MenuItem(_STATUS_LABELS["idle"])
         self._status_item.set_callback(None)  # not clickable
@@ -300,9 +144,9 @@ class TypenessMenuBar(rumps.App):
         x = (screen_frame.size.width - size) / 2
         y = 80.0
 
-        win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+        win = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
             ((x, y), (size, size)),
-            NSBorderlessWindowMask,
+            NSBorderlessWindowMask | NSWindowStyleMaskNonactivatingPanel,
             NSBackingStoreBuffered,
             False,
         )
@@ -311,7 +155,11 @@ class TypenessMenuBar(rumps.App):
         win.setAlphaValue_(0.80)
         win.setLevel_(999)
         win.setIgnoresMouseEvents_(True)
-        win.setCollectionBehavior_(1 << 1)  # NSWindowCollectionBehaviorMoveToActiveSpace
+        win.setFloatingPanel_(True)
+        win.setHidesOnDeactivate_(False)
+        win.setCollectionBehavior_(
+            (1 << 0) | (1 << 8) | (1 << 6)  # CanJoinAllSpaces | FullScreenAuxiliary | IgnoresCycle
+        )
         win.setReleasedWhenClosed_(False)
 
         bg = NSView.alloc().initWithFrame_(((0, 0), (size, size)))
@@ -337,9 +185,9 @@ class TypenessMenuBar(rumps.App):
         x = (screen_frame.size.width - size) / 2
         y = 80.0
 
-        win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+        win = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
             ((x, y), (size, size)),
-            NSBorderlessWindowMask,
+            NSBorderlessWindowMask | NSWindowStyleMaskNonactivatingPanel,
             NSBackingStoreBuffered,
             False,
         )
@@ -348,7 +196,11 @@ class TypenessMenuBar(rumps.App):
         win.setAlphaValue_(0.0)
         win.setLevel_(999)
         win.setIgnoresMouseEvents_(True)
-        win.setCollectionBehavior_(1 << 1)  # NSWindowCollectionBehaviorMoveToActiveSpace
+        win.setFloatingPanel_(True)
+        win.setHidesOnDeactivate_(False)
+        win.setCollectionBehavior_(
+            (1 << 0) | (1 << 8) | (1 << 6)  # CanJoinAllSpaces | FullScreenAuxiliary | IgnoresCycle
+        )
         win.setReleasedWhenClosed_(False)
 
         bg = NSView.alloc().initWithFrame_(((0, 0), (size, size)))
@@ -477,12 +329,15 @@ class TypenessMenuBar(rumps.App):
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
         ])
 
-    def _on_settings(self, _) -> None:
-        self._settings_win.show(on_change_callback=self._on_setting_changed)
+    def set_settings_callback(self, cb) -> None:
+        self._external_settings_callback = cb
 
-    def _on_setting_changed(self, _value: bool) -> None:
-        # The poll timer will pick up the new value on the next tick
-        pass
+    def _on_settings(self, _) -> None:
+        self._settings_win.show()
+
+    def _on_setting_changed(self) -> None:
+        if self._external_settings_callback:
+            self._external_settings_callback()
 
     def _on_quit(self, _) -> None:
         self._cleanup_fn()
