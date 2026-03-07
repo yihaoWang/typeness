@@ -38,17 +38,20 @@ Click **"設定..." (Settings)** in the Typeness menu bar to open the preference
 - Toggle **Auto-start at login** (LaunchAgent).
 - Enable **Debug Mode** (saves each recording as WAV + JSON to `~/Typeness/debug/`).
 - Toggle the **prominent menu bar icon** on or off.
+- Enable **Confirm before inserting** — copies result to clipboard instead of auto-inserting, so you can review and paste manually.
+- Configure **Push-to-talk** and **Toggle mode** hotkeys.
 
 On first run, Whisper (`openai/whisper-large-v3-turbo`) and Qwen3 (`Qwen/Qwen3-1.7B`) models will be downloaded automatically.
 
 ### How it works
 
 1. Launch the program — a person speaking icon appears in the menu bar and starts spinning (hourglass) while downloading/loading models.
-2. Press **Shift+Command+A** or click the menu bar icon to start recording (works in any application)
+2. **Toggle mode**: Press **Shift+Command+A** (default) to start recording, press again to stop.
+   **Push-to-talk**: Hold **Option+Space** (default) to record, release to stop.
+   You can also click the menu bar icon to start/stop.
 3. Speak into your microphone (in Traditional Chinese)
-4. Press **Shift+Command+A** again or click the menu bar icon to stop recording
-5. The processed text is automatically pasted into the focused window
-6. During transcription/processing, press the hotkey or click "取消" in the menu to cancel
+4. The processed text is inserted directly at the cursor via Accessibility API (clipboard is untouched). If the Accessibility API is unavailable, falls back to Cmd+V.
+5. During transcription/processing, press the hotkey or click "取消" in the menu to cancel
 7. The terminal displays:
    - **Whisper raw**: original speech-to-text result
    - **LLM processed**: cleaned and formatted text (punctuation added, lists formatted)
@@ -85,9 +88,11 @@ Modular design with unified PyTorch + transformers inference engine. Source code
 - `audio.py` — microphone recording (sounddevice), auto-resample to 16kHz via scipy
 - `transcribe.py` — Whisper speech-to-text and CJK text normalization
 - `postprocess.py` — Qwen3 LLM text cleanup (punctuation, list formatting), cancellable generation
-- `hotkey.py` — global keyboard listener (Shift+Command+A toggle via pynput), macOS CGEventTap recovery
-- `menubar.py` — macOS menu bar UI (rumps), state display and controls
-- `clipboard.py` — clipboard write and auto-paste (pyperclip + pynput Controller)
+- `hotkey.py` — configurable global hotkeys (toggle + push-to-talk), key swallowing, macOS CGEventTap recovery
+- `menubar.py` — macOS menu bar UI (rumps), state overlays (red/orange/green dots, NSPanel for full-screen support)
+- `clipboard.py` — text insertion via Accessibility API (AXSelectedText), clipboard fallback (Cmd+V)
+- `settings.py` — JSON-backed settings with hotkey, display, and behavior options
+- `settings_ui.py` — native AppKit settings panel
 - `login_item.py` — macOS LaunchAgent management for auto-start
 
 ### Models
