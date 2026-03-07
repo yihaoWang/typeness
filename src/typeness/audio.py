@@ -93,8 +93,12 @@ def _close_stream(stream: sd.InputStream, thread: threading.Thread | None) -> No
     """
     if thread is not None:
         thread.join(timeout=1.0)
+        if thread.is_alive():
+            print("[audio] WARNING: Recording thread deadlocked in read(). Leaking stream to prevent crash.")
+            return  # Do NOT call stop/close, it will deadlock PortAudio in C block.
+
     try:
-        stream.stop()
+        stream.abort()
     except Exception:
         pass
     try:
