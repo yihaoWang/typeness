@@ -37,6 +37,7 @@ def _event_loop(
 
         try:
             if event == EVENT_START_RECORDING:
+                listener._recording = True
                 menu_app.set_state("recording")
                 # Run record_audio_start() in a thread — sd.InputStream.start() can
                 # block indefinitely if CoreAudio is interrupted (e.g. after Space switch).
@@ -67,6 +68,7 @@ def _event_loop(
                 pass
 
             elif event == EVENT_STOP_RECORDING:
+                listener._recording = False
                 audio = record_audio_stop()
                 cancel_event.clear()
                 listener.busy = True
