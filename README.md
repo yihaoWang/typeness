@@ -18,27 +18,32 @@ cd typeness
 
 # Create virtual environment and install dependencies
 uv sync
+
+# Package as a standalone macOS App (Typeness.app)
+./build_mac_app.sh
 ```
 
 PyTorch is installed from standard PyPI, which supports CUDA, MPS (Apple Silicon), and CPU automatically. For CUDA-specific optimization, see the commented `[tool.uv.sources]` section in `pyproject.toml`.
 
 ## Usage
 
+You can launch the standalone macOS application by opening `dist/Typeness.app`. Alternatively, for development, you can run it via the terminal:
+
 ```bash
 uv run typeness
 ```
 
-To enable debug mode (saves each recording as WAV + JSON to `debug/`):
+### Settings GUI
+Click **"設定..." (Settings)** in the Typeness menu bar to open the preferences window where you can:
+- Toggle **Auto-start at login** (LaunchAgent).
+- Enable **Debug Mode** (saves each recording as WAV + JSON to `~/Typeness/debug/`).
+- Toggle the **prominent menu bar icon** on or off.
 
-```bash
-uv run typeness --debug
-```
-
-On first run, Whisper (`openai/whisper-large-v3-turbo`) and Qwen3 (`Qwen/Qwen3-1.7B`) models will be downloaded from HuggingFace automatically.
+On first run, Whisper (`openai/whisper-large-v3-turbo`) and Qwen3 (`Qwen/Qwen3-1.7B`) models will be downloaded automatically.
 
 ### How it works
 
-1. Launch the program — a menu bar icon (🎙) appears and the terminal shows status
+1. Launch the program — a person speaking icon appears in the menu bar and starts spinning (hourglass) while downloading/loading models.
 2. Press **Shift+Command+A** or click the menu bar icon to start recording (works in any application)
 3. Speak into your microphone (in Traditional Chinese)
 4. Press **Shift+Command+A** again or click the menu bar icon to stop recording
@@ -52,12 +57,9 @@ On first run, Whisper (`openai/whisper-large-v3-turbo`) and Qwen3 (`Qwen/Qwen3-1
 
 ### Auto-start at login (macOS)
 
-```bash
-uv run typeness --install-login-item      # install as login item
-uv run typeness --uninstall-login-item    # remove login item
-```
+You can configure Typeness to launch at startup by checking the **"登入時自動啟動 Typeness"** option in the Settings menu.
 
-Logs are written to `~/Library/Logs/typeness.log`.
+Logs for the background application are written to `~/Library/Logs/typeness.log`.
 
 ## Regression Testing
 
