@@ -11,4 +11,8 @@ echo "Applying explicit ad-hoc deep code signature to satisfy macOS TCC..."
 xattr -cr dist/Typeness.app 2>/dev/null || true
 codesign --force --deep --sign - dist/Typeness.app
 
-echo "Build complete! The app is located at dist/Typeness.app"
+echo "Installing to /Applications..."
+rm -rf /Applications/Typeness.app
+cp -R dist/Typeness.app /Applications/
+
+echo "Build complete! Typeness.app installed to /Applications/"

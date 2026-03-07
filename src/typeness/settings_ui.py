@@ -171,9 +171,115 @@ class SettingsUI:
         sep.setFillColor_(AppKit.NSColor.quaternaryLabelColor())
         return sep
 
+    def _create_section_header(self, content, x, y, box_w, sf_symbol, title, color=None):
+        """Create a section header with SF Symbol icon + label."""
+        if color is None:
+            color = AppKit.NSColor.systemTealColor()
+        img = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_(sf_symbol, None)
+        iv = AppKit.NSImageView.alloc().initWithFrame_(Foundation.NSMakeRect(x, y, 18, 18))
+        iv.setImage_(img)
+        iv.setContentTintColor_(color)
+        content.addSubview_(iv)
+        lbl = self._create_label(Foundation.NSMakeRect(x + 24, y, 200, 18), title, 13, AppKit.NSFontWeightSemibold)
+        content.addSubview_(lbl)
+
+    def _check_mic_permission(self):
+        """Check microphone permission status via AVCaptureDevice."""
+        try:
+            AVCaptureDevice = objc.lookUpClass("AVCaptureDevice")
+            # authorizationStatusForMediaType: 0=NotDetermined, 1=Restricted, 2=Denied, 3=Authorized
+            status = AVCaptureDevice.authorizationStatusForMediaType_("soun")  # AVMediaTypeAudio = "soun"
+            return status == 3
+        except Exception:
+            return False
+
+    def _check_accessibility_permission(self):
+        """Check accessibility permission status."""
+        from ApplicationServices import AXIsProcessTrusted
+        return AXIsProcessTrusted()
+
+    def _add_two_row_box(self, content, cy, margin, box_w, rows):
+        """Create a rounded box with two rows of content.
+
+        Each row is a dict with keys: title, subtitle, and one of:
+          widget='switch', value=bool, target=obj, action=str
+          widget='shortcut', setting_key=str, on_change=callable
+          widget='status', granted=bool, target=obj, action=str
+        Returns the new cy after the box.
+        """
+        box_h = 100
+        row_h = 42
+        pad_top = 8
+        pad_x = 16
+
+        box = self._create_box(Foundation.NSMakeRect(margin, cy - box_h, box_w, box_h))
+
+        for i, row in enumerate(rows):
+            ry = box_h - pad_top - row_h * i - row_h // 2
+
+            # Title + subtitle
+            lbl = self._create_label(
+                Foundation.NSMakeRect(pad_x, ry + 4, box_w - 160, 18),
+                row["title"], 13, AppKit.NSFontWeightMedium)
+            sub = self._create_label(
+                Foundation.NSMakeRect(pad_x, ry - 12, box_w - 160, 15),
+                row["subtitle"], 11, AppKit.NSFontWeightRegular, AppKit.NSColor.secondaryLabelColor())
+            box.addSubview_(lbl)
+            box.addSubview_(sub)
+
+            # Right-side widget
+            w = row.get("widget")
+            if w == "switch":
+                sw = AppKit.NSSwitch.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 60, ry - 2, 40, 24))
+                sw.setState_(AppKit.NSControlStateValueOn if row["value"] else AppKit.NSControlStateValueOff)
+                sw.setTarget_(row["target"])
+                sw.setAction_(row["action"])
+                box.addSubview_(sw)
+            elif w == "shortcut":
+                btn = ShortcutButton.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 90, ry - 2, 72, 24))
+                btn.setBezelStyle_(AppKit.NSRoundRectBezelStyle)
+                btn.setting_key = row["setting_key"]
+                btn.on_change = row["on_change"]
+                btn._update_title()
+                box.addSubview_(btn)
+            elif w == "status":
+                if row["granted"]:
+                    st = self._create_label(
+                        Foundation.NSMakeRect(box_w - 110, ry, 90, 18),
+                        "Granted", 12, AppKit.NSFontWeightMedium, AppKit.NSColor.systemGreenColor())
+                    st.setAlignment_(AppKit.NSTextAlignmentRight)
+                    box.addSubview_(st)
+                else:
+                    btn = AppKit.NSButton.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 120, ry - 4, 104, 24))
+                    btn.setTitle_("Open Settings")
+                    btn.setBezelStyle_(AppKit.NSRoundRectBezelStyle)
+                    btn.setContentTintColor_(AppKit.NSColor.systemGreenColor())
+                    btn.setTarget_(row["target"])
+                    btn.setAction_(row["action"])
+                    box.addSubview_(btn)
+
+            # Separator between rows (not after last)
+            if i < len(rows) - 1:
+                sep_y = box_h - pad_top - row_h * (i + 1)
+                box.addSubview_(self._create_separator(Foundation.NSMakeRect(pad_x, sep_y, box_w - pad_x * 2, 1)))
+
+        content.addSubview_(box)
+        return cy - box_h
+
     def build(self):
+        # Layout constants
         width = 480
-        height = 580
+        margin = 24
+        box_w = width - margin * 2
+        section_gap = 28       # space between box bottom and next section header
+        header_box_gap = 8     # space between section header and its box
+        box_h = 100            # two-row box height
+
+        # Compute total height top-down
+        # titlebar(28) + top_pad(20) + status(40) + sep_gap(20)
+        # + 3 × (header(20) + header_box_gap + box_h + section_gap) - last section_gap + bottom_pad(24)
+        content_h = 28 + 20 + 40 + 20 + 3 * (20 + header_box_gap + box_h + section_gap) - section_gap + 24
+        height = content_h
 
         screen_frame = AppKit.NSScreen.mainScreen().frame()
         x = (screen_frame.size.width - width) / 2
@@ -190,145 +296,79 @@ class SettingsUI:
         self.window.setReleasedWhenClosed_(False)
         self.window.setDelegate_(self.controller)
 
-        # Transparent visual effect background for modern look
-        content = AppKit.NSVisualEffectView.alloc().initWithFrame_(((0,0), (width, height)))
+        content = AppKit.NSVisualEffectView.alloc().initWithFrame_(((0, 0), (width, height)))
         content.setMaterial_(AppKit.NSVisualEffectMaterialWindowBackground)
         content.setBlendingMode_(AppKit.NSVisualEffectBlendingModeBehindWindow)
         content.setState_(AppKit.NSVisualEffectStateActive)
         self.window.setContentView_(content)
 
-        cy = height - 60
-        margin = 30
-        box_w = width - margin*2
+        cy = height - 48  # below titlebar
+        box_w = width - margin * 2
 
-        # 1. Status Section
+        # ── Status header ──
         icon_img = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_("person.wave.2.fill", None)
         icon_view = AppKit.NSImageView.alloc().initWithFrame_(Foundation.NSMakeRect(margin, cy, 32, 32))
         icon_view.setImage_(icon_img)
         icon_view.setContentTintColor_(AppKit.NSColor.systemGreenColor())
         content.addSubview_(icon_view)
 
-        title = self._create_label(Foundation.NSMakeRect(margin+45, cy+14, 200, 20), "Typeness", 16, AppKit.NSFontWeightSemibold)
+        title = self._create_label(Foundation.NSMakeRect(margin + 42, cy + 14, 200, 20), "Typeness", 16, AppKit.NSFontWeightSemibold)
         content.addSubview_(title)
 
-        status_dot = self._create_label(Foundation.NSMakeRect(margin+45, cy-2, 10, 16), "●", 10, AppKit.NSFontWeightBold, AppKit.NSColor.systemGreenColor())
-        status_text = self._create_label(Foundation.NSMakeRect(margin+55, cy-2, 100, 16), "Ready", 12, AppKit.NSFontWeightRegular, AppKit.NSColor.secondaryLabelColor())
+        status_dot = self._create_label(Foundation.NSMakeRect(margin + 42, cy - 2, 10, 16), "●", 10, AppKit.NSFontWeightBold, AppKit.NSColor.systemGreenColor())
+        status_text = self._create_label(Foundation.NSMakeRect(margin + 52, cy - 2, 100, 16), "Ready", 12, AppKit.NSFontWeightRegular, AppKit.NSColor.secondaryLabelColor())
         content.addSubview_(status_dot)
         content.addSubview_(status_text)
 
-        # 2. Visual Indicator Section
-        cy -= 50
-        lbl = self._create_label(Foundation.NSMakeRect(margin, cy, 200, 20), "􀏚  Visual Indicator", 13, AppKit.NSFontWeightSemibold)
-        content.addSubview_(lbl)
+        cy -= 20
+        content.addSubview_(self._create_separator(Foundation.NSMakeRect(margin, cy, box_w, 1)))
+        cy -= 20
 
-        cy -= 110
-        box1 = self._create_box(Foundation.NSMakeRect(margin, cy, box_w, 100))
+        # ── Visual Indicator ──
+        self._create_section_header(content, margin, cy, box_w, "eye", "Visual Indicator")
+        cy -= 20 + header_box_gap
+        cy = self._add_two_row_box(content, cy, margin, box_w, [
+            {"title": "Show visual indicator",
+             "subtitle": "Display a central icon when Typeness is processing",
+             "widget": "switch", "value": app_settings.show_floating_window,
+             "target": self.controller, "action": "showFloatingChanged:"},
+            {"title": "Confirm before inserting",
+             "subtitle": "Review transcription before inserting at cursor",
+             "widget": "switch", "value": app_settings.confirm_before_inserting,
+             "target": self.controller, "action": "confirmInsertChanged:"},
+        ])
+        cy -= section_gap
 
-        # Show visual indicator
-        y = 65
-        lbl1 = self._create_label(Foundation.NSMakeRect(16, y+10, 200, 20), "Show visual indicator", 13, AppKit.NSFontWeightMedium)
-        lbl1_sub = self._create_label(Foundation.NSMakeRect(16, y-5, 300, 16), "Display a central icon when Typeness is processing", 11, AppKit.NSFontWeightRegular, AppKit.NSColor.secondaryLabelColor())
-        box1.addSubview_(lbl1)
-        box1.addSubview_(lbl1_sub)
+        # ── Shortcuts ──
+        self._create_section_header(content, margin, cy, box_w, "keyboard", "Shortcuts")
+        cy -= 20 + header_box_gap
+        cy = self._add_two_row_box(content, cy, margin, box_w, [
+            {"title": "Push-to-talk",
+             "subtitle": "Hold to record, release to transcribe",
+             "widget": "shortcut", "setting_key": "shortcut_push_to_talk",
+             "on_change": self.on_change},
+            {"title": "Toggle mode",
+             "subtitle": "Press to start/stop recording",
+             "widget": "shortcut", "setting_key": "shortcut_toggle_mode",
+             "on_change": self.on_change},
+        ])
+        cy -= section_gap
 
-        sw1 = AppKit.NSSwitch.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 60, y+5, 40, 24))
-        sw1.setState_(AppKit.NSControlStateValueOn if app_settings.show_floating_window else AppKit.NSControlStateValueOff)
-        sw1.setTarget_(self.controller)
-        sw1.setAction_("showFloatingChanged:")
-        box1.addSubview_(sw1)
-
-        box1.addSubview_(self._create_separator(Foundation.NSMakeRect(16, y-15, box_w-32, 1)))
-
-        # Confirm before inserting
-        y = 5
-        lbl3 = self._create_label(Foundation.NSMakeRect(16, y+10, 200, 20), "Confirm before inserting", 13, AppKit.NSFontWeightMedium)
-        lbl3_sub = self._create_label(Foundation.NSMakeRect(16, y-5, 300, 16), "Review transcription before inserting at cursor", 11, AppKit.NSFontWeightRegular, AppKit.NSColor.secondaryLabelColor())
-        box1.addSubview_(lbl3)
-        box1.addSubview_(lbl3_sub)
-
-        sw2 = AppKit.NSSwitch.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 60, y+10, 40, 24))
-        sw2.setState_(AppKit.NSControlStateValueOn if app_settings.confirm_before_inserting else AppKit.NSControlStateValueOff)
-        sw2.setTarget_(self.controller)
-        sw2.setAction_("confirmInsertChanged:")
-        box1.addSubview_(sw2)
-
-        content.addSubview_(box1)
-
-        # 3. Shortcuts Section
-        cy -= 45
-        lbl = self._create_label(Foundation.NSMakeRect(margin, cy, 200, 20), "􀇳  Shortcuts", 13, AppKit.NSFontWeightSemibold)
-        content.addSubview_(lbl)
-
-        cy -= 110
-        box2 = self._create_box(Foundation.NSMakeRect(margin, cy, box_w, 100))
-
-        y = 55
-        lbl4 = self._create_label(Foundation.NSMakeRect(16, y+10, 200, 20), "Push-to-talk", 13, AppKit.NSFontWeightMedium)
-        lbl4_sub = self._create_label(Foundation.NSMakeRect(16, y-5, 300, 16), "Hold to record, release to transcribe", 11, AppKit.NSFontWeightRegular, AppKit.NSColor.secondaryLabelColor())
-        box2.addSubview_(lbl4)
-        box2.addSubview_(lbl4_sub)
-
-        btn_ptt = ShortcutButton.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 80, y+5, 64, 24))
-        btn_ptt.setBezelStyle_(AppKit.NSRoundRectBezelStyle)
-        btn_ptt.setting_key = "shortcut_push_to_talk"
-        btn_ptt.on_change = self.on_change
-        btn_ptt._update_title()
-        box2.addSubview_(btn_ptt)
-
-        box2.addSubview_(self._create_separator(Foundation.NSMakeRect(16, y-15, box_w-32, 1)))
-
-        y = 5
-        lbl5 = self._create_label(Foundation.NSMakeRect(16, y+10, 200, 20), "Toggle mode", 13, AppKit.NSFontWeightMedium)
-        lbl5_sub = self._create_label(Foundation.NSMakeRect(16, y-5, 300, 16), "Press to start/stop recording", 11, AppKit.NSFontWeightRegular, AppKit.NSColor.secondaryLabelColor())
-        box2.addSubview_(lbl5)
-        box2.addSubview_(lbl5_sub)
-
-        btn_tog = ShortcutButton.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 80, y+5, 64, 24))
-        btn_tog.setBezelStyle_(AppKit.NSRoundRectBezelStyle)
-        btn_tog.setting_key = "shortcut_toggle_mode"
-        btn_tog.on_change = self.on_change
-        btn_tog._update_title()
-        box2.addSubview_(btn_tog)
-
-        content.addSubview_(box2)
-
-        # 4. Permissions Section
-        cy -= 45
-        lbl = self._create_label(Foundation.NSMakeRect(margin, cy, 200, 20), "􀢒  Permissions", 13, AppKit.NSFontWeightSemibold)
-        content.addSubview_(lbl)
-
-        cy -= 110
-        box3 = self._create_box(Foundation.NSMakeRect(margin, cy, box_w, 100))
-
-        y = 55
-        lbl6 = self._create_label(Foundation.NSMakeRect(16, y+10, 200, 20), "Microphone", 13, AppKit.NSFontWeightMedium)
-        lbl6_sub = self._create_label(Foundation.NSMakeRect(16, y-5, 300, 16), "Required for voice recording", 11, AppKit.NSFontWeightRegular, AppKit.NSColor.secondaryLabelColor())
-        box3.addSubview_(lbl6)
-        box3.addSubview_(lbl6_sub)
-
-        btn_mic = AppKit.NSButton.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 120, y+5, 104, 24))
-        btn_mic.setTitle_("Open Settings")
-        btn_mic.setBezelStyle_(AppKit.NSRoundRectBezelStyle)
-        btn_mic.setTarget_(self.controller)
-        btn_mic.setAction_("openMicSettings:")
-        box3.addSubview_(btn_mic)
-
-        box3.addSubview_(self._create_separator(Foundation.NSMakeRect(16, y-15, box_w-32, 1)))
-
-        y = 5
-        lbl7 = self._create_label(Foundation.NSMakeRect(16, y+10, 200, 20), "Accessibility", 13, AppKit.NSFontWeightMedium)
-        lbl7_sub = self._create_label(Foundation.NSMakeRect(16, y-5, 300, 16), "Required for global shortcuts and text insertion", 11, AppKit.NSFontWeightRegular, AppKit.NSColor.secondaryLabelColor())
-        box3.addSubview_(lbl7)
-        box3.addSubview_(lbl7_sub)
-
-        btn_acc = AppKit.NSButton.alloc().initWithFrame_(Foundation.NSMakeRect(box_w - 120, y+5, 104, 24))
-        btn_acc.setTitle_("Open Settings")
-        btn_acc.setBezelStyle_(AppKit.NSRoundRectBezelStyle)
-        btn_acc.setTarget_(self.controller)
-        btn_acc.setAction_("openAccSettings:")
-        box3.addSubview_(btn_acc)
-
-        content.addSubview_(box3)
+        # ── Permissions ──
+        mic_granted = self._check_mic_permission()
+        acc_granted = self._check_accessibility_permission()
+        self._create_section_header(content, margin, cy, box_w, "shield.lefthalf.filled", "Permissions")
+        cy -= 20 + header_box_gap
+        cy = self._add_two_row_box(content, cy, margin, box_w, [
+            {"title": "Microphone",
+             "subtitle": "Required for voice recording",
+             "widget": "status", "granted": mic_granted,
+             "target": self.controller, "action": "openMicSettings:"},
+            {"title": "Accessibility",
+             "subtitle": "Required for text insertion",
+             "widget": "status", "granted": acc_granted,
+             "target": self.controller, "action": "openAccSettings:"},
+        ])
 
     def show(self):
         if not self.window:
