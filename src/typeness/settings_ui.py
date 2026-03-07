@@ -374,7 +374,7 @@ class SettingsUI:
             icon_img = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_("macwindow", None)
             
         header_content_w = 64 + 16 + 120  # icon + gap + text
-        start_x = (width - header_content_w) / 2
+        start_x = margin
             
         icon_view = AppKit.NSImageView.alloc().initWithFrame_(Foundation.NSMakeRect(start_x, header_y, icon_size, icon_size))
         icon_view.setImage_(icon_img)
