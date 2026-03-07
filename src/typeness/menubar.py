@@ -193,7 +193,7 @@ class _SettingsWindow:
         self._make_separator(cy, content)
 
         cy -= 28
-        content.addSubview_(self._make_description("開始 / 停止錄音：  ⇧ Control A", y=cy, height=20))
+        content.addSubview_(self._make_description("開始 / 停止錄音：  ⇧ Command A", y=cy, height=20))
         cy -= 20
         content.addSubview_(self._make_description("您可以在任何應用程式中按下此快捷鍵觸發轉換。", y=cy, height=20))
 

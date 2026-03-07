@@ -198,7 +198,7 @@ def main(*, debug: bool = False):
             daemon=True,
         )
         worker.start()
-        print("\nReady! Press Shift+Control+A or click the menu bar icon to start/stop voice input.")
+        print("\nReady! Press Shift+Command+A or click the menu bar icon to start/stop voice input.")
         print("Press Ctrl+C or use the menu bar icon to exit.\n")
 
     init_thread = threading.Thread(target=_init_models_and_start_worker, daemon=True)

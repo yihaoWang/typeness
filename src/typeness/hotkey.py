@@ -1,6 +1,6 @@
 """Global hotkey listener module for Typeness.
 
-Listens for Shift+Control+A to toggle recording state.
+Listens for Shift+Command+A to toggle recording state.
 Dispatches events to the main thread via a queue.Queue.
 """
 
@@ -16,12 +16,12 @@ EVENT_START_RECORDING = "start_recording"
 EVENT_STOP_RECORDING = "stop_recording"
 EVENT_CANCEL = "cancel"
 
-# Hotkey combination: Shift+Control+A
+# Hotkey combination: Shift+Command+A
 # On macOS, modifier keys change the char value (e.g., Ctrl+A → '\x01'),
 # breaking char-based matching. Use vk (virtual key code) instead.
 _IS_MACOS = sys.platform == "darwin"
 _A_KEY = KeyCode.from_vk(0) if _IS_MACOS else KeyCode.from_char("a")  # vk=0 is 'A' on macOS
-_HOTKEY = {Key.shift, Key.ctrl, _A_KEY}
+_HOTKEY = {Key.shift, Key.cmd, _A_KEY}
 
 # On macOS, subclass pynput Listener to handle CGEventTap being disabled by
 # timeout — macOS kills taps whose callbacks don't respond quickly enough.
@@ -53,7 +53,7 @@ _WATCHDOG_INTERVAL = 5  # seconds between listener health checks
 
 
 class HotkeyListener:
-    """Listens for Shift+Control+A to toggle recording on/off.
+    """Listens for Shift+Command+A to toggle recording on/off.
 
     State machine: idle -> recording -> idle
     - First hotkey press: idle -> recording (sends EVENT_START_RECORDING)
@@ -131,6 +131,8 @@ class HotkeyListener:
             return Key.shift
         if key in (Key.ctrl_l, Key.ctrl_r):
             return Key.ctrl
+        if key in (Key.cmd_l, Key.cmd_r):
+            return Key.cmd
         if isinstance(key, KeyCode):
             if _IS_MACOS and key.vk is not None:
                 # On macOS, normalize to vk-only KeyCode so hash is consistent

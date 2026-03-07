@@ -39,9 +39,9 @@ On first run, Whisper (`openai/whisper-large-v3-turbo`) and Qwen3 (`Qwen/Qwen3-1
 ### How it works
 
 1. Launch the program — a menu bar icon (🎙) appears and the terminal shows status
-2. Press **Shift+Control+A** or click the menu bar icon to start recording (works in any application)
+2. Press **Shift+Command+A** or click the menu bar icon to start recording (works in any application)
 3. Speak into your microphone (in Traditional Chinese)
-4. Press **Shift+Control+A** again or click the menu bar icon to stop recording
+4. Press **Shift+Command+A** again or click the menu bar icon to stop recording
 5. The processed text is automatically pasted into the focused window
 6. During transcription/processing, press the hotkey or click "取消" in the menu to cancel
 7. The terminal displays:
@@ -83,7 +83,7 @@ Modular design with unified PyTorch + transformers inference engine. Source code
 - `audio.py` — microphone recording (sounddevice), auto-resample to 16kHz via scipy
 - `transcribe.py` — Whisper speech-to-text and CJK text normalization
 - `postprocess.py` — Qwen3 LLM text cleanup (punctuation, list formatting), cancellable generation
-- `hotkey.py` — global keyboard listener (Shift+Control+A toggle via pynput), macOS CGEventTap recovery
+- `hotkey.py` — global keyboard listener (Shift+Command+A toggle via pynput), macOS CGEventTap recovery
 - `menubar.py` — macOS menu bar UI (rumps), state display and controls
 - `clipboard.py` — clipboard write and auto-paste (pyperclip + pynput Controller)
 - `login_item.py` — macOS LaunchAgent management for auto-start
