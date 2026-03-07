@@ -9,7 +9,7 @@ import time
 import traceback
 
 from typeness.audio import MIN_RECORDING_SECONDS, SAMPLE_RATE, record_audio_start, record_audio_stop, stop_stream
-from typeness.clipboard import paste_text
+from typeness.clipboard import copy_to_clipboard, insert_text_at_cursor, paste_text
 from typeness.settings import app_settings
 from typeness.debug import DEBUG_DIR, save_capture
 from typeness.hotkey import EVENT_CANCEL, EVENT_START_RECORDING, EVENT_STOP_RECORDING, HotkeyListener
@@ -115,10 +115,12 @@ def _event_loop(
                     menu_app.set_state("done")  # reverts to idle automatically after 1.5s
                     
                     if app_settings.confirm_before_inserting:
-                        print("Auto-paste disabled via settings.")
+                        copy_to_clipboard(processed_text)
+                        print("Copied to clipboard.")
                     else:
-                        # Auto-paste to focused window
-                        paste_text(processed_text)
+                        if not insert_text_at_cursor(processed_text):
+                            print("[fallback] AX insert failed, using Cmd+V paste")
+                            paste_text(processed_text)
 
                     # Debug capture (after paste so it doesn't affect perceived latency)
                     if debug or menu_app._app_settings.debug_mode:
